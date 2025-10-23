@@ -97,7 +97,7 @@ class LeidenEpiDocGUI:
     def __init__(self):
         self.converter = LeidenToEpiDocConverter()
         # Backing store for logical (non-bidi-reordered) input text
-        self.input_logical_text: str = ""
+        self.input_logical_text: Optional[str] = None
         self.setup_gui()
     
     # --- RTL helpers ---
