@@ -463,8 +463,8 @@ class LeidenEpiDocGUI:
         dpg.set_value("save_location_input", path)
     
     def convert_callback(self):
-        # Prefer logical store; if empty, fall back to current widget value
-        leiden_text = self.input_logical_text or dpg.get_value("input_text")
+        # Prefer logical store; if None, fall back to current widget value
+        leiden_text = self.input_logical_text if self.input_logical_text is not None else dpg.get_value("input_text")
         
         if not leiden_text or leiden_text == "Enter Leiden Convention text here or load from file...":
             dpg.set_value("status_text", "Please enter or load Leiden text first.")
