@@ -133,7 +133,7 @@ class LeidenEpiDocGUI:
         # Only apply bidi when text likely contains RTL
         if self._contains_rtl(text):
             try:
-                # type: ignore[operator]
+                # type: ignore[no-any-return]
                 return str(get_display(text))  # safe cast for type checker
             except Exception:
                 return text
