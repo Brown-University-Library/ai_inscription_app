@@ -1,0 +1,14 @@
+[project]
+name = "ai-inscription-app"
+version = "0.1.0"
+description = "An AI-powered application for inscription tasks."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.67.0",
+    "dearpygui>=2.1.0",
+    "dearpygui-ext>=2.0.0",
+]
+
+[tool.uv]
+python = "3.12"
