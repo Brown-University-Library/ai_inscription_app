@@ -242,6 +242,9 @@ class LeidenEpiDocGUI:
                     dpg.add_menu_item(label="Configure API", callback=self.show_api_settings)
                     dpg.add_menu_item(label="Language/Script Support", callback=self.show_language_settings)
                     dpg.add_menu_item(label="Set Save Location", callback=self.show_save_location_settings)
+                
+                with dpg.menu(label="View"):
+                    dpg.add_menu_item(label="Open Horizontal Scroll Viewer", callback=self.show_scroll_viewer)
             
             # Input section
             dpg.add_text("Input (Leiden Convention):")
@@ -253,7 +256,9 @@ class LeidenEpiDocGUI:
                 height=250,
                 default_value="Enter Leiden Convention text here or load from file...",
                 callback=self.input_text_changed,
-                on_enter=False
+                on_enter=False,
+                # Allow horizontal scrolling for long lines on DPG 2.1+
+                no_horizontal_scroll=False
             )
 
             # Toggle to preview RTL in the same input box (read-only in preview)
@@ -284,8 +289,17 @@ class LeidenEpiDocGUI:
                 multiline=True,
                 width=-1,
                 height=300,
-                readonly=True
+                readonly=True,
+                # Allow horizontal scrolling for long lines on DPG 2.1+
+                no_horizontal_scroll=False
             )
+            # Ensure long lines don't soft wrap and can be scrolled horizontally where supported
+            # (Kept as a no-op safety in case runtime toggling is needed on some builds)
+            for _tag in ("input_text", "output_text"):
+                try:
+                    dpg.configure_item(_tag, no_horizontal_scroll=False)
+                except Exception:
+                    pass
             
             # Status bar
             dpg.add_separator()
@@ -329,6 +343,23 @@ class LeidenEpiDocGUI:
             modal=True
         ):
             pass
+        
+        # Horizontal Scroll Viewer (read-only) for long lines
+        with dpg.window(label="Scrollable Viewer", tag="scroll_viewer_window", width=1150, height=500, show=False, modal=False):
+            dpg.add_text("Read-only viewer with horizontal scrollbars for long lines.", color=(150,150,150))
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Refresh", callback=self.refresh_scroll_viewer)
+                dpg.add_checkbox(label="Use RTL preview for input pane", tag="scroll_viewer_rtl", default_value=False, callback=self.refresh_scroll_viewer)
+            dpg.add_separator()
+            with dpg.group(horizontal=True):
+                with dpg.child_window(tag="scroll_input_child", width=560, height=380, border=True, autosize_x=False, autosize_y=False, horizontal_scrollbar=True):
+                    dpg.add_text("Input (read-only)", color=(200,200,255))
+                    dpg.add_separator()
+                    dpg.add_text("", tag="scroll_input_text", wrap=0)
+                with dpg.child_window(tag="scroll_output_child", width=560, height=380, border=True, autosize_x=False, autosize_y=False, horizontal_scrollbar=True):
+                    dpg.add_text("Output (read-only)", color=(200,255,200))
+                    dpg.add_separator()
+                    dpg.add_text("", tag="scroll_output_text", wrap=0)
         
         # API Settings Window
         with dpg.window(label="API Settings", tag="api_settings_window", width=600, height=350, show=False, modal=True):
@@ -487,6 +518,8 @@ class LeidenEpiDocGUI:
             dpg.set_value("status_text", "Conversion failed. Check the output for details.")
         else:
             dpg.set_value("status_text", "Conversion complete!")
+        # update viewer if open
+        self.refresh_scroll_viewer()
 
     # --- Input (single widget) RTL preview handling ---
     def input_text_changed(self, sender, app_data):
@@ -500,6 +533,8 @@ class LeidenEpiDocGUI:
                 self.input_logical_text = dpg.get_value("input_text")
             except Exception:
                 pass
+        # keep scroll viewer in sync if visible
+        self.refresh_scroll_viewer()
 
     def toggle_rtl_input_preview(self):
         """Switch input box between logical editable and RTL visual read-only states."""
@@ -592,6 +627,38 @@ class LeidenEpiDocGUI:
         self.converter.save_config()
         dpg.hide_item("save_location_window")
         dpg.set_value("status_text", "Save location settings updated.")
+    
+    # --- Scrollable Viewer helpers ---
+    def show_scroll_viewer(self):
+        try:
+            self.refresh_scroll_viewer()
+        except Exception:
+            pass
+        dpg.show_item("scroll_viewer_window")
+
+    def refresh_scroll_viewer(self):
+        if not dpg.does_item_exist("scroll_viewer_window"):
+            return
+        if not dpg.is_item_shown("scroll_viewer_window"):
+            return
+        # Input side
+        try:
+            use_rtl = dpg.get_value("scroll_viewer_rtl") if HAS_BIDI else False
+        except Exception:
+            use_rtl = False
+        logical = self.input_logical_text if self.input_logical_text is not None else dpg.get_value("input_text")
+        input_display = self._bidi_visual(logical) if use_rtl else (logical or "")
+        # Output side (apply display-only visual reorder of text nodes)
+        output_display = self._bidi_visual_xml(self.converter.last_output) if HAS_BIDI else (self.converter.last_output or "")
+        # Set the text (wrap=0 ensures no wrapping; child windows have horizontal scrollbars)
+        try:
+            dpg.set_value("scroll_input_text", input_display or "")
+        except Exception:
+            pass
+        try:
+            dpg.set_value("scroll_output_text", output_display or "")
+        except Exception:
+            pass
     
     def run(self):
         dpg.start_dearpygui()
