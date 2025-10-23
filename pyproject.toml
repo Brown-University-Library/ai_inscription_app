@@ -8,4 +8,5 @@ dependencies = [
     "anthropic>=0.67.0",
     "dearpygui>=2.1.0",
     "dearpygui-ext>=2.0.0",
+    "python-bidi>=0.4.2,<1.0",
 ]

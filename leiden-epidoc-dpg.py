@@ -1,10 +1,19 @@
 import os
 import json
+import re
 import dearpygui.dearpygui as dpg
 import anthropic
 from pathlib import Path
 import traceback
 from leiden_prompts import SYSTEM_INSTRUCTION, EXAMPLES_TEXT
+from typing import Optional, Callable
+get_display: Optional[Callable[[str], str]] = None
+try:
+    # For RTL display shaping (visual order) in LTR widgets
+    from bidi.algorithm import get_display
+    HAS_BIDI = True
+except Exception:
+    HAS_BIDI = False
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -87,7 +96,48 @@ class LeidenToEpiDocConverter:
 class LeidenEpiDocGUI:
     def __init__(self):
         self.converter = LeidenToEpiDocConverter()
+        # Backing store for logical (non-bidi-reordered) input text
+        self.input_logical_text: Optional[str] = None
         self.setup_gui()
+    
+    # --- RTL helpers ---
+    @staticmethod
+    def _contains_rtl(text: str) -> bool:
+        if not text:
+            return False
+        # Hebrew (0590-05FF), Arabic (0600-06FF, 0750-077F), Syriac (0700-074F),
+        # Arabic Presentation Forms (FB50-FDCF, FDF0-FDFF, FE70-FEFF)
+        ranges = [
+            (0x0590, 0x05FF),
+            (0x0600, 0x06FF),
+            (0x0700, 0x074F),
+            (0x0750, 0x077F),
+            (0x08A0, 0x08FF),  # Arabic Extended-A
+            (0xFB50, 0xFDFF),
+            (0xFE70, 0xFEFF),
+        ]
+        for ch in text:
+            cp = ord(ch)
+            for a, b in ranges:
+                if a <= cp <= b:
+                    return True
+        return False
+    
+    def _bidi_visual(self, text: str) -> str:
+        if not text:
+            return ""
+        if not HAS_BIDI:
+            return text
+        if not callable(get_display):  # safety if import failed
+            return text
+        # Only apply bidi when text likely contains RTL
+        if self._contains_rtl(text):
+            try:
+                # type: ignore[no-any-return]
+                return str(get_display(text))  # safe cast for type checker
+            except Exception:
+                return text
+        return text
     
     def load_font_with_settings(self):
         """Load font with glyph ranges based on language settings"""
@@ -201,7 +251,17 @@ class LeidenEpiDocGUI:
                 multiline=True,
                 width=-1,
                 height=250,
-                default_value="Enter Leiden Convention text here or load from file..."
+                default_value="Enter Leiden Convention text here or load from file...",
+                callback=self.input_text_changed,
+                on_enter=False
+            )
+
+            # Toggle to preview RTL in the same input box (read-only in preview)
+            dpg.add_checkbox(
+                label="RTL preview (read-only)",
+                tag="rtl_input_preview_enabled",
+                default_value=False,
+                callback=self.toggle_rtl_input_preview
             )
             
             dpg.add_separator()
@@ -370,7 +430,14 @@ class LeidenEpiDocGUI:
             try:
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                dpg.set_value("input_text", content)
+                # Update logical store and the widget display depending on preview state
+                self.input_logical_text = content
+                if HAS_BIDI and dpg.get_value("rtl_input_preview_enabled"):
+                    dpg.configure_item("input_text", readonly=True)
+                    dpg.set_value("input_text", self._bidi_visual(content))
+                else:
+                    dpg.configure_item("input_text", readonly=False)
+                    dpg.set_value("input_text", content)
                 dpg.set_value("status_text", f"Loaded file: {path}")
             except Exception as e:
                 dpg.set_value("status_text", f"Error loading file: {str(e)}")
@@ -396,7 +463,8 @@ class LeidenEpiDocGUI:
         dpg.set_value("save_location_input", path)
     
     def convert_callback(self):
-        leiden_text = dpg.get_value("input_text")
+        # Prefer logical store; if None, fall back to current widget value
+        leiden_text = self.input_logical_text if self.input_logical_text is not None else dpg.get_value("input_text")
         
         if not leiden_text or leiden_text == "Enter Leiden Convention text here or load from file...":
             dpg.set_value("status_text", "Please enter or load Leiden text first.")
@@ -410,14 +478,76 @@ class LeidenEpiDocGUI:
         
         # Store the result
         self.converter.last_output = result
-        
-        # Display result
-        dpg.set_value("output_text", result)
+
+        # Display result (visually reorder only the text content for RTL/mixed scripts)
+        display_result = self._bidi_visual_xml(result) if HAS_BIDI else result
+        dpg.set_value("output_text", display_result)
         
         if "Error" in result:
             dpg.set_value("status_text", "Conversion failed. Check the output for details.")
         else:
             dpg.set_value("status_text", "Conversion complete!")
+
+    # --- Input (single widget) RTL preview handling ---
+    def input_text_changed(self, sender, app_data):
+        """Update logical store only when not in preview mode (editable)."""
+        try:
+            in_preview = dpg.get_value("rtl_input_preview_enabled")
+        except Exception:
+            in_preview = False
+        if not in_preview:
+            try:
+                self.input_logical_text = dpg.get_value("input_text")
+            except Exception:
+                pass
+
+    def toggle_rtl_input_preview(self):
+        """Switch input box between logical editable and RTL visual read-only states."""
+        try:
+            enabled = dpg.get_value("rtl_input_preview_enabled")
+        except Exception:
+            enabled = False
+        # Ensure logical store is initialized
+        if not self.input_logical_text:
+            try:
+                self.input_logical_text = dpg.get_value("input_text") or ""
+            except Exception:
+                self.input_logical_text = ""
+
+        if enabled:
+            if not HAS_BIDI or not callable(get_display):
+                dpg.set_value("status_text", "RTL preview requires 'python-bidi'. Showing logical text.")
+                dpg.configure_item("input_text", readonly=True)
+                dpg.set_value("input_text", self.input_logical_text)
+            else:
+                dpg.configure_item("input_text", readonly=True)
+                dpg.set_value("input_text", self._bidi_visual(self.input_logical_text))
+        else:
+            # Back to editable logical text
+            dpg.configure_item("input_text", readonly=False)
+            dpg.set_value("input_text", self.input_logical_text)
+
+    # --- XML visual reorder for display-only ---
+    def _bidi_visual_xml(self, xml_text: str) -> str:
+        """
+        For display only: run bidi visual reordering on text segments outside of XML tags,
+        preserving tag order and original whitespace/formatting.
+        """
+        if not xml_text:
+            return xml_text
+        if not HAS_BIDI or not callable(get_display):
+            return xml_text
+        # Split into tags and text nodes
+        parts = re.split(r"(<[^>]+>)", xml_text)
+        for i, part in enumerate(parts):
+            if not part:
+                continue
+            if part.startswith("<") and part.endswith(">"):
+                # tag - leave as is
+                continue
+            # text node - apply bidi only if contains RTL
+            parts[i] = self._bidi_visual(part)
+        return "".join(parts)
     
     def show_api_settings(self):
         dpg.show_item("api_settings_window")
