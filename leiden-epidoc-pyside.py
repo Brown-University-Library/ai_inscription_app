@@ -361,7 +361,6 @@ class LeidenEpiDocGUI(QMainWindow):
     def conversion_finished(self, result):
         self.converter.last_output = result
         
-        # Qt handles all Unicode and BiDi automatically - just set the text!
         self.output_text.setPlainText(result)
         
         if "Error" in result:
@@ -385,8 +384,6 @@ class LeidenEpiDocGUI(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Set application-wide font for better Unicode support
-    # Qt automatically supports all Unicode that the system fonts provide
     font = QFont()
     font.setPointSize(10)
     app.setFont(font)
