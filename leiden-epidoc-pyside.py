@@ -305,7 +305,6 @@ class LeidenEpiDocGUI(QMainWindow):
         h_policy = Qt.ScrollBarAsNeeded if not enabled else Qt.ScrollBarAlwaysOff
         self.input_text.setHorizontalScrollBarPolicy(h_policy)
         self.output_text.setHorizontalScrollBarPolicy(h_policy)
-    # (Removed duplicate menu creation; nothing needed here)
     
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
