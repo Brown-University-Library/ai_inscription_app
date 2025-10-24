@@ -236,7 +236,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.input_text = QTextEdit()
         self.input_text.setPlaceholderText("Enter Leiden Convention text here or load from file...")
         self.input_text.setMinimumHeight(250)
-        # Qt handles RTL automatically - no special configuration needed!
+        # Qt handles right-to-left (RTL) automatically - no special configuration needed!
         main_layout.addWidget(self.input_text)
         
         # Convert button
