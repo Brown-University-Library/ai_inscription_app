@@ -334,7 +334,7 @@ class LeidenEpiDocGUI(QMainWindow):
     def convert_text(self):
         leiden_text = self.input_text.toPlainText()
         
-        if not leiden_text or leiden_text == "Enter Leiden Convention text here or load from file...":
+        if not leiden_text:
             QMessageBox.warning(self, "No Input", 
                               "Please enter or load Leiden text first.")
             return
