@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox
 )
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
 
 # Configuration file path
@@ -210,13 +210,12 @@ class LeidenEpiDocGUI(QMainWindow):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
         self.conversion_thread = None
+        self.word_wrap_enabled = True
         self.setup_ui()
     
     def setup_ui(self):
         self.setWindowTitle("Leiden to EpiDoc Converter")
         self.setMinimumSize(1200, 800)
-        
-        # Create menu bar
         self.create_menu_bar()
         
         # Central widget
@@ -232,11 +231,11 @@ class LeidenEpiDocGUI(QMainWindow):
         load_btn = QPushButton("Load from File")
         load_btn.clicked.connect(self.load_file)
         main_layout.addWidget(load_btn)
-        
         self.input_text = QTextEdit()
         self.input_text.setPlaceholderText("Enter Leiden Convention text here or load from file...")
         self.input_text.setMinimumHeight(250)
-        # Qt handles right-to-left (RTL) automatically - no special configuration needed!
+        self.input_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.input_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         main_layout.addWidget(self.input_text)
         
         # Convert button
@@ -252,11 +251,11 @@ class LeidenEpiDocGUI(QMainWindow):
         save_btn = QPushButton("Save Output to File")
         save_btn.clicked.connect(self.save_output)
         main_layout.addWidget(save_btn)
-        
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(300)
-        # Qt handles all Unicode and RTL automatically!
+        self.output_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.output_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         main_layout.addWidget(self.output_text)
         
         # Status bar
@@ -264,37 +263,48 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
-    
     def create_menu_bar(self):
         menu_bar = self.menuBar()
-        
+
         # File menu
         file_menu = menu_bar.addMenu("File")
-        
         load_action = QAction("Load File", self)
         load_action.triggered.connect(self.load_file)
         file_menu.addAction(load_action)
-        
         save_action = QAction("Save Output", self)
         save_action.triggered.connect(self.save_output)
         file_menu.addAction(save_action)
-        
         file_menu.addSeparator()
-        
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-        
+
+        # View menu
+        view_menu = menu_bar.addMenu("View")
+        self.word_wrap_action = QAction("Word Wrap", self, checkable=True)
+        self.word_wrap_action.setChecked(True)
+        self.word_wrap_action.triggered.connect(self.toggle_word_wrap)
+        view_menu.addAction(self.word_wrap_action)
+
         # Settings menu
         settings_menu = menu_bar.addMenu("Settings")
-        
         api_action = QAction("Configure API", self)
         api_action.triggered.connect(self.show_api_settings)
         settings_menu.addAction(api_action)
-        
         save_location_action = QAction("Set Save Location", self)
         save_location_action.triggered.connect(self.show_save_location_settings)
         settings_menu.addAction(save_location_action)
+
+    def toggle_word_wrap(self):
+        enabled = self.word_wrap_action.isChecked()
+        self.word_wrap_enabled = enabled
+        mode = QTextEdit.WidgetWidth if enabled else QTextEdit.NoWrap
+        self.input_text.setLineWrapMode(mode)
+        self.output_text.setLineWrapMode(mode)
+        # Show horizontal scrollbars only if word wrap is off
+        h_policy = Qt.ScrollBarAsNeeded if not enabled else Qt.ScrollBarAlwaysOff
+        self.input_text.setHorizontalScrollBarPolicy(h_policy)
+        self.output_text.setHorizontalScrollBarPolicy(h_policy)
     
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
