@@ -188,18 +188,35 @@ Vacat
 - Corresponding EpiDoc Output: <space extent="unknown" unit="character"/>
 <instruction>
 
-Before providing your final translation, first wrap the following steps in tags and include them in your response: 
-1. Read through the entire text to familiarize yourself with its content and structure.
-2. List all Leiden Convention symbols present in the given text.
-3. Map each identified symbol to its corresponding EpiDoc XML tag using the guideline above tagged <instruction>.
-4. Consider and explain how you will handle nested tags and their proper order.
-5. Outline any potential challenges in the translation and how you plan to address them.
+RESPONSE FORMAT:
+You must structure your response using the following XML tags:
 
-Second, check the following before providing your final translation: 
-1. Preserve all alphabetic characters and spaces as they appear in the original text. 
-2. Review your translation to ensure all symbols have been accurately converted and tags are properly nested. 
+1. <analysis> - Your internal thinking process. Include the following steps:
+   a. Read through the entire text to familiarize yourself with its content and structure.
+   b. List all Leiden Convention symbols present in the given text.
+   c. Map each identified symbol to its corresponding EpiDoc XML tag using the guideline above tagged <instruction>.
+   d. Consider and explain how you will handle nested tags and their proper order.
+   e. Outline any potential challenges in the translation and how you plan to address them.
 
-This detailed breakdown will help ensure a thorough and accurate translation. After your analysis, provide the final XML translation wrapped in tags. Ensure that your output strictly adheres to the EpiDoc schema and conventions.'''
+2. <notes> - Any notes or observations relevant to the user about the inscription, translation choices, or ambiguities.
+
+3. <final_translation> - The complete EpiDoc XML output. Before including this:
+   a. Preserve all alphabetic characters and spaces as they appear in the original text. 
+   b. Review your translation to ensure all symbols have been accurately converted and tags are properly nested.
+   c. Ensure that your output strictly adheres to the EpiDoc schema and conventions.
+
+Your complete response must follow this structure:
+<analysis>
+[Your detailed analysis here]
+</analysis>
+
+<notes>
+[Any relevant notes for the user]
+</notes>
+
+<final_translation>
+[The complete EpiDoc XML translation]
+</final_translation>'''
 
 
 EXAMPLES_TEXT = """<examples>
