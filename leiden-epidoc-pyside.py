@@ -1,29 +1,18 @@
 import os
 import json
 import sys
-import re
 import anthropic
 from pathlib import Path
 import traceback
 from leiden_prompts import SYSTEM_INSTRUCTION, EXAMPLES_TEXT
-from typing import Optional, Callable
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QPushButton, QLabel, QMenuBar, QMenu, QFileDialog,
-    QDialog, QLineEdit, QCheckBox, QFormLayout, QGroupBox, QMessageBox,
-    QScrollArea
+    QTextEdit, QPushButton, QLabel, QFileDialog,
+    QDialog, QLineEdit, QFormLayout, QMessageBox
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QAction, QFont
-
-get_display: Optional[Callable[[str], str]] = None
-try:
-    # For RTL display shaping (visual order) in LTR widgets
-    from bidi.algorithm import get_display
-    HAS_BIDI = True
-except Exception:
-    HAS_BIDI = False
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -49,23 +38,7 @@ class LeidenToEpiDocConverter:
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "claude-sonnet-4-20250514")
         self.save_location = self.config.get("save_location", str(Path.home()))
-        self.language_settings = self.config.get("language_settings", self.get_default_language_settings())
         self.last_output = ""
-    
-    def get_default_language_settings(self):
-        """Get default language settings - basic scripts enabled by default"""
-        return {
-            "basic_latin": True,
-            "greek": True,
-            "hebrew": True,
-            "arabic": False,
-            "coptic": False,
-            "cyrillic": False,
-            "syriac": False,
-            "armenian": False,
-            "extended_latin": True,
-            "full_bmp": False
-        }
         
     def load_config(self):
         """Load configuration from file if it exists"""
@@ -82,14 +55,13 @@ class LeidenToEpiDocConverter:
         config = {
             "api_key": self.api_key,
             "model": self.model,
-            "save_location": self.save_location,
-            "language_settings": self.language_settings
+            "save_location": self.save_location
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
     
     def get_epidoc(self, leiden) -> str:
-        """Core conversion function - unchanged from original"""
+        """Core conversion function"""
         if not self.api_key:
             return "Error: API key not configured. Please set it in Settings."
         
@@ -182,147 +154,6 @@ class APISettingsDialog(QDialog):
         self.accept()
 
 
-class LanguageSettingsDialog(QDialog):
-    """Dialog for language/script settings"""
-    def __init__(self, parent, converter):
-        super().__init__(parent)
-        self.converter = converter
-        self.setWindowTitle("Language/Script Support")
-        self.setModal(True)
-        self.setMinimumWidth(700)
-        self.setMinimumHeight(600)
-        
-        main_layout = QVBoxLayout()
-        
-        # Warning text
-        title = QLabel("Configure Language and Script Support")
-        title.setStyleSheet("color: #FFFF96; font-weight: bold;")
-        main_layout.addWidget(title)
-        
-        warning = QLabel("Warning: Enabling more scripts increases memory usage and startup time.")
-        warning.setStyleSheet("color: #FF9696;")
-        main_layout.addWidget(warning)
-        
-        info1 = QLabel("• Basic scripts: ~5MB RAM, minimal startup impact")
-        info1.setStyleSheet("color: gray;")
-        main_layout.addWidget(info1)
-        
-        info2 = QLabel("• All scripts: ~20-50MB RAM, 1-2 second startup delay")
-        info2.setStyleSheet("color: gray;")
-        main_layout.addWidget(info2)
-        
-        info3 = QLabel("• Full BMP: ~50-100MB RAM, 2-3 second startup delay")
-        info3.setStyleSheet("color: gray;")
-        main_layout.addWidget(info3)
-        
-        # Scroll area for checkboxes
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout()
-        
-        # Essential Scripts
-        essential_group = QGroupBox("Essential Scripts (Recommended)")
-        essential_layout = QVBoxLayout()
-        
-        self.checkboxes = {}
-        
-        self.checkboxes['basic_latin'] = QCheckBox("Basic Latin (ASCII)")
-        self.checkboxes['basic_latin'].setChecked(
-            self.converter.language_settings.get("basic_latin", True))
-        essential_layout.addWidget(self.checkboxes['basic_latin'])
-        
-        self.checkboxes['greek'] = QCheckBox("Greek (including Extended/Polytonic)")
-        self.checkboxes['greek'].setChecked(
-            self.converter.language_settings.get("greek", True))
-        essential_layout.addWidget(self.checkboxes['greek'])
-        
-        self.checkboxes['hebrew'] = QCheckBox("Hebrew")
-        self.checkboxes['hebrew'].setChecked(
-            self.converter.language_settings.get("hebrew", True))
-        essential_layout.addWidget(self.checkboxes['hebrew'])
-        
-        self.checkboxes['extended_latin'] = QCheckBox("Extended Latin (Diacritics)")
-        self.checkboxes['extended_latin'].setChecked(
-            self.converter.language_settings.get("extended_latin", True))
-        essential_layout.addWidget(self.checkboxes['extended_latin'])
-        
-        essential_group.setLayout(essential_layout)
-        scroll_layout.addWidget(essential_group)
-        
-        # Additional Scripts
-        additional_group = QGroupBox("Additional Scripts")
-        additional_layout = QVBoxLayout()
-        
-        self.checkboxes['arabic'] = QCheckBox("Arabic")
-        self.checkboxes['arabic'].setChecked(
-            self.converter.language_settings.get("arabic", False))
-        additional_layout.addWidget(self.checkboxes['arabic'])
-        
-        self.checkboxes['coptic'] = QCheckBox("Coptic")
-        self.checkboxes['coptic'].setChecked(
-            self.converter.language_settings.get("coptic", False))
-        additional_layout.addWidget(self.checkboxes['coptic'])
-        
-        self.checkboxes['cyrillic'] = QCheckBox("Cyrillic")
-        self.checkboxes['cyrillic'].setChecked(
-            self.converter.language_settings.get("cyrillic", False))
-        additional_layout.addWidget(self.checkboxes['cyrillic'])
-        
-        self.checkboxes['syriac'] = QCheckBox("Syriac")
-        self.checkboxes['syriac'].setChecked(
-            self.converter.language_settings.get("syriac", False))
-        additional_layout.addWidget(self.checkboxes['syriac'])
-        
-        self.checkboxes['armenian'] = QCheckBox("Armenian")
-        self.checkboxes['armenian'].setChecked(
-            self.converter.language_settings.get("armenian", False))
-        additional_layout.addWidget(self.checkboxes['armenian'])
-        
-        additional_group.setLayout(additional_layout)
-        scroll_layout.addWidget(additional_group)
-        
-        # Maximum Coverage
-        max_group = QGroupBox("Maximum Coverage (High Memory Usage)")
-        max_layout = QVBoxLayout()
-        
-        self.checkboxes['full_bmp'] = QCheckBox("Full Basic Multilingual Plane (ALL common scripts)")
-        self.checkboxes['full_bmp'].setChecked(
-            self.converter.language_settings.get("full_bmp", False))
-        max_layout.addWidget(self.checkboxes['full_bmp'])
-        
-        max_group.setLayout(max_layout)
-        scroll_layout.addWidget(max_group)
-        
-        scroll_widget.setLayout(scroll_layout)
-        scroll.setWidget(scroll_widget)
-        main_layout.addWidget(scroll)
-        
-        # Note
-        note = QLabel("Note: Changes require application restart to take effect.")
-        note.setStyleSheet("color: #FFFF96;")
-        main_layout.addWidget(note)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self.save_settings)
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(save_btn)
-        button_layout.addWidget(cancel_btn)
-        button_layout.addStretch()
-        
-        main_layout.addLayout(button_layout)
-        self.setLayout(main_layout)
-    
-    def save_settings(self):
-        for key, checkbox in self.checkboxes.items():
-            self.converter.language_settings[key] = checkbox.isChecked()
-        self.converter.save_config()
-        self.accept()
-
-
 class SaveLocationDialog(QDialog):
     """Dialog for save location settings"""
     def __init__(self, parent, converter):
@@ -378,7 +209,6 @@ class LeidenEpiDocGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
-        self.input_logical_text = None
         self.conversion_thread = None
         self.setup_ui()
     
@@ -406,13 +236,8 @@ class LeidenEpiDocGUI(QMainWindow):
         self.input_text = QTextEdit()
         self.input_text.setPlaceholderText("Enter Leiden Convention text here or load from file...")
         self.input_text.setMinimumHeight(250)
-        self.input_text.textChanged.connect(self.input_text_changed)
+        # Qt handles RTL automatically - no special configuration needed!
         main_layout.addWidget(self.input_text)
-        
-        # RTL preview checkbox
-        self.rtl_preview_checkbox = QCheckBox("RTL preview (read-only)")
-        self.rtl_preview_checkbox.stateChanged.connect(self.toggle_rtl_preview)
-        main_layout.addWidget(self.rtl_preview_checkbox)
         
         # Convert button
         self.convert_btn = QPushButton("Convert to EpiDoc")
@@ -431,6 +256,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(300)
+        # Qt handles all Unicode and RTL automatically!
         main_layout.addWidget(self.output_text)
         
         # Status bar
@@ -466,86 +292,9 @@ class LeidenEpiDocGUI(QMainWindow):
         api_action.triggered.connect(self.show_api_settings)
         settings_menu.addAction(api_action)
         
-        language_action = QAction("Language/Script Support", self)
-        language_action.triggered.connect(self.show_language_settings)
-        settings_menu.addAction(language_action)
-        
         save_location_action = QAction("Set Save Location", self)
         save_location_action.triggered.connect(self.show_save_location_settings)
         settings_menu.addAction(save_location_action)
-    
-    # --- RTL helpers ---
-    @staticmethod
-    def _contains_rtl(text: str) -> bool:
-        if not text:
-            return False
-        # Hebrew, Arabic, Syriac, Arabic Presentation Forms
-        ranges = [
-            (0x0590, 0x05FF),
-            (0x0600, 0x06FF),
-            (0x0700, 0x074F),
-            (0x0750, 0x077F),
-            (0x08A0, 0x08FF),
-            (0xFB50, 0xFDFF),
-            (0xFE70, 0xFEFF),
-        ]
-        for ch in text:
-            cp = ord(ch)
-            for a, b in ranges:
-                if a <= cp <= b:
-                    return True
-        return False
-    
-    def _bidi_visual(self, text: str) -> str:
-        if not text:
-            return ""
-        if not HAS_BIDI or not callable(get_display):
-            return text
-        if self._contains_rtl(text):
-            try:
-                return str(get_display(text))
-            except Exception:
-                return text
-        return text
-    
-    def _bidi_visual_xml(self, xml_text: str) -> str:
-        """Visual reordering on text segments outside of XML tags"""
-        if not xml_text:
-            return xml_text
-        if not HAS_BIDI or not callable(get_display):
-            return xml_text
-        parts = re.split(r"(<[^>]+>)", xml_text)
-        for i, part in enumerate(parts):
-            if not part:
-                continue
-            if part.startswith("<") and part.endswith(">"):
-                continue
-            parts[i] = self._bidi_visual(part)
-        return "".join(parts)
-    
-    def input_text_changed(self):
-        """Update logical store only when not in preview mode"""
-        if not self.rtl_preview_checkbox.isChecked():
-            self.input_logical_text = self.input_text.toPlainText()
-    
-    def toggle_rtl_preview(self):
-        """Switch between logical editable and RTL visual read-only states"""
-        enabled = self.rtl_preview_checkbox.isChecked()
-        
-        if not self.input_logical_text:
-            self.input_logical_text = self.input_text.toPlainText() or ""
-        
-        if enabled:
-            if not HAS_BIDI or not callable(get_display):
-                self.status_label.setText("RTL preview requires 'python-bidi'. Showing logical text.")
-                self.input_text.setReadOnly(True)
-                self.input_text.setPlainText(self.input_logical_text)
-            else:
-                self.input_text.setReadOnly(True)
-                self.input_text.setPlainText(self._bidi_visual(self.input_logical_text))
-        else:
-            self.input_text.setReadOnly(False)
-            self.input_text.setPlainText(self.input_logical_text)
     
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -555,13 +304,8 @@ class LeidenEpiDocGUI(QMainWindow):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                self.input_logical_text = content
-                if HAS_BIDI and self.rtl_preview_checkbox.isChecked():
-                    self.input_text.setReadOnly(True)
-                    self.input_text.setPlainText(self._bidi_visual(content))
-                else:
-                    self.input_text.setReadOnly(False)
-                    self.input_text.setPlainText(content)
+                # Qt handles RTL/BiDi automatically - just set the text!
+                self.input_text.setPlainText(content)
                 self.status_label.setText(f"Loaded file: {file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error loading file: {str(e)}")
@@ -588,7 +332,7 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.status_label.setText(f"Error saving file: {str(e)}")
     
     def convert_text(self):
-        leiden_text = self.input_logical_text if self.input_logical_text is not None else self.input_text.toPlainText()
+        leiden_text = self.input_text.toPlainText()
         
         if not leiden_text or leiden_text == "Enter Leiden Convention text here or load from file...":
             QMessageBox.warning(self, "No Input", 
@@ -607,9 +351,8 @@ class LeidenEpiDocGUI(QMainWindow):
     def conversion_finished(self, result):
         self.converter.last_output = result
         
-        # Display result with visual reordering for RTL
-        display_result = self._bidi_visual_xml(result) if HAS_BIDI else result
-        self.output_text.setPlainText(display_result)
+        # Qt handles all Unicode and BiDi automatically - just set the text!
+        self.output_text.setPlainText(result)
         
         if "Error" in result:
             self.status_label.setText("Conversion failed. Check the output for details.")
@@ -623,11 +366,6 @@ class LeidenEpiDocGUI(QMainWindow):
         if dialog.exec():
             self.status_label.setText("API settings saved.")
     
-    def show_language_settings(self):
-        dialog = LanguageSettingsDialog(self, self.converter)
-        if dialog.exec():
-            self.status_label.setText("Language settings saved. Restart application to apply changes.")
-    
     def show_save_location_settings(self):
         dialog = SaveLocationDialog(self, self.converter)
         if dialog.exec():
@@ -638,6 +376,7 @@ def main():
     app = QApplication(sys.argv)
     
     # Set application-wide font for better Unicode support
+    # Qt automatically supports all Unicode that the system fonts provide
     font = QFont()
     font.setPointSize(10)
     app.setFont(font)
