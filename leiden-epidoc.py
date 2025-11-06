@@ -4,12 +4,13 @@ import sys
 import anthropic
 from pathlib import Path
 import traceback
+import re
 from leiden_prompts import SYSTEM_INSTRUCTION, EXAMPLES_TEXT
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
-    QDialog, QLineEdit, QFormLayout, QMessageBox
+    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -21,7 +22,7 @@ CONFIG_FILE = "leiden_epidoc_config.json"
 class ConversionThread(QThread):
     """Thread for running conversion without blocking UI"""
     
-    finished = Signal(str)
+    finished = Signal(dict)
     
     def __init__(self, converter, leiden_text):
         super().__init__()
@@ -34,6 +35,11 @@ class ConversionThread(QThread):
 
 
 class LeidenToEpiDocConverter:
+    # Pre-compiled regex patterns for better performance
+    ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
+    NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
+    TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
+    
     def __init__(self):
         self.config = self.load_config()
         self.api_key = self.config.get("api_key", "")
@@ -61,10 +67,14 @@ class LeidenToEpiDocConverter:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
     
-    def get_epidoc(self, leiden) -> str:
-        """Core conversion function"""
+    def get_epidoc(self, leiden) -> dict:
+        """Core conversion function - returns a dict with parsed sections"""
         if not self.api_key:
-            return "Error: API key not configured. Please set it in Settings."
+            return {
+                "error": "Error: API key not configured. Please set it in Settings.",
+                "full_text": "Error: API key not configured. Please set it in Settings.",
+                "has_tags": False
+            }
         
         try:
             client = anthropic.Anthropic(api_key=self.api_key)
@@ -87,9 +97,41 @@ class LeidenToEpiDocConverter:
                 ]
             )
             
-            return message.content[0].text
+            full_text = message.content[0].text
+            return self._parse_response(full_text)
+            
         except Exception as e:
-            return f"Error during conversion: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"Error during conversion: {str(e)}\n{traceback.format_exc()}"
+            return {
+                "error": error_msg,
+                "full_text": error_msg,
+                "has_tags": False
+            }
+    
+    def _parse_response(self, response_text: str) -> dict:
+        """Parse the response to extract analysis, notes, and final_translation tags"""
+        result = {
+            "full_text": response_text,
+            "has_tags": False,
+            "analysis": "",
+            "notes": "",
+            "final_translation": "",
+            "error": None
+        }
+        
+        # Try to extract the tags using pre-compiled regex patterns
+        analysis_match = self.ANALYSIS_PATTERN.search(response_text)
+        notes_match = self.NOTES_PATTERN.search(response_text)
+        translation_match = self.TRANSLATION_PATTERN.search(response_text)
+        
+        # Check if all required tags are present
+        if analysis_match and notes_match and translation_match:
+            result["has_tags"] = True
+            result["analysis"] = analysis_match.group(1).strip()
+            result["notes"] = notes_match.group(1).strip()
+            result["final_translation"] = translation_match.group(1).strip()
+        
+        return result
 
 
 class APISettingsDialog(QDialog):
@@ -211,11 +253,18 @@ class SaveLocationDialog(QDialog):
 class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
     
+    # Constants for UI messages
+    CONVERTING_MESSAGE = "Converting... Please wait."
+    MISSING_TAGS_WARNING = ("Warning: The response from the AI did not include the expected "
+                           "tags (<analysis>, <notes>, <final_translation>). "
+                           "Displaying the full unseparated response in the Full Results tab.")
+    
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
         self.conversion_thread = None
         self.word_wrap_enabled = True
+        self.last_result = None
         self.setup_ui()
     
     def setup_ui(self):
@@ -249,19 +298,70 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_text)
         main_layout.addWidget(self.convert_btn)
         
-        # Output section
+        # Output section with splitter
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        save_btn = QPushButton("Save Output to File")
-        save_btn.clicked.connect(self.save_output)
-        main_layout.addWidget(save_btn)
-        self.output_text = QTextEdit()
-        self.output_text.setReadOnly(True)
-        self.output_text.setMinimumHeight(300)
-        self.output_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.output_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        main_layout.addWidget(self.output_text)
+        # Create a horizontal splitter for the two panes
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # Left pane: Final Translation
+        left_pane = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        
+        translation_label = QLabel("Final Translation:")
+        left_layout.addWidget(translation_label)
+        
+        save_translation_btn = QPushButton("Save Translation to File")
+        save_translation_btn.clicked.connect(self.save_translation)
+        left_layout.addWidget(save_translation_btn)
+        
+        self.translation_text = QTextEdit()
+        self.translation_text.setReadOnly(True)
+        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_layout.addWidget(self.translation_text)
+        
+        left_pane.setLayout(left_layout)
+        splitter.addWidget(left_pane)
+        
+        # Right pane: Tabs for Notes, Analysis, Full Results
+        right_pane = QWidget()
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.tabs = QTabWidget()
+        
+        # Notes tab
+        self.notes_text = QTextEdit()
+        self.notes_text.setReadOnly(True)
+        self.notes_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.notes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tabs.addTab(self.notes_text, "Notes")
+        
+        # Analysis tab
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setReadOnly(True)
+        self.analysis_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.analysis_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tabs.addTab(self.analysis_text, "Analysis")
+        
+        # Full Results tab
+        self.full_results_text = QTextEdit()
+        self.full_results_text.setReadOnly(True)
+        self.full_results_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tabs.addTab(self.full_results_text, "Full Results")
+        
+        right_layout.addWidget(self.tabs)
+        right_pane.setLayout(right_layout)
+        splitter.addWidget(right_pane)
+        
+        # Set initial sizes for splitter (50/50 split)
+        splitter.setSizes([600, 600])
+        
+        main_layout.addWidget(splitter)
         
         # Status bar
         self.status_label = QLabel("Ready")
@@ -277,9 +377,12 @@ class LeidenEpiDocGUI(QMainWindow):
         load_action = QAction("Load File", self)
         load_action.triggered.connect(self.load_file)
         file_menu.addAction(load_action)
-        save_action = QAction("Save Output", self)
-        save_action.triggered.connect(self.save_output)
-        file_menu.addAction(save_action)
+        save_translation_action = QAction("Save Translation", self)
+        save_translation_action.triggered.connect(self.save_translation)
+        file_menu.addAction(save_translation_action)
+        save_full_action = QAction("Save Full Output", self)
+        save_full_action.triggered.connect(self.save_output)
+        file_menu.addAction(save_full_action)
         file_menu.addSeparator()
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
@@ -306,11 +409,17 @@ class LeidenEpiDocGUI(QMainWindow):
         self.word_wrap_enabled = enabled
         mode = QTextEdit.WidgetWidth if enabled else QTextEdit.NoWrap
         self.input_text.setLineWrapMode(mode)
-        self.output_text.setLineWrapMode(mode)
+        self.translation_text.setLineWrapMode(mode)
+        self.notes_text.setLineWrapMode(mode)
+        self.analysis_text.setLineWrapMode(mode)
+        self.full_results_text.setLineWrapMode(mode)
         # Show horizontal scrollbars only if word wrap is off
         h_policy = Qt.ScrollBarAsNeeded if not enabled else Qt.ScrollBarAlwaysOff
         self.input_text.setHorizontalScrollBarPolicy(h_policy)
-        self.output_text.setHorizontalScrollBarPolicy(h_policy)
+        self.translation_text.setHorizontalScrollBarPolicy(h_policy)
+        self.notes_text.setHorizontalScrollBarPolicy(h_policy)
+        self.analysis_text.setHorizontalScrollBarPolicy(h_policy)
+        self.full_results_text.setHorizontalScrollBarPolicy(h_policy)
     
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -327,25 +436,60 @@ class LeidenEpiDocGUI(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Error loading file: {str(e)}")
                 self.status_label.setText(f"Error loading file: {str(e)}")
     
-    def save_output(self):
-        if not self.converter.last_output:
-            QMessageBox.warning(self, "No Output", 
-                              "No output to save. Please convert text first.")
+    def save_translation(self):
+        """Save the translation (final_translation) to a file"""
+        if not self.last_result or not self.last_result.get("final_translation", "").strip():
+            QMessageBox.warning(self, "No Translation", 
+                              "No translation to save. Please convert text first.")
             return
         
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save EpiDoc Output", 
-            os.path.join(self.converter.save_location, "epidoc_output.xml"),
+            self, "Save Translation", 
+            os.path.join(self.converter.save_location, "epidoc_translation.xml"),
             "XML Files (*.xml);;All Files (*)")
         
         if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(self.converter.last_output)
+                    f.write(self.last_result["final_translation"])
+                self.status_label.setText(f"Saved translation to: {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
+                self.status_label.setText(f"Error saving file: {str(e)}")
+    
+    def save_output(self):
+        """Save the full output to a file (legacy method kept for compatibility)"""
+        if not self.last_result:
+            QMessageBox.warning(self, "No Output", 
+                              "No output to save. Please convert text first.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Full Output", 
+            os.path.join(self.converter.save_location, "epidoc_output.txt"),
+            "Text Files (*.txt);;All Files (*)")
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(self.last_result.get("full_text", ""))
                 self.status_label.setText(f"Saved output to: {file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
                 self.status_label.setText(f"Error saving file: {str(e)}")
+    
+    def _clear_output_widgets(self):
+        """Clear all output text widgets"""
+        self.translation_text.setPlainText("")
+        self.notes_text.setPlainText("")
+        self.analysis_text.setPlainText("")
+    
+    def _set_converting_message(self):
+        """Set converting message in all output widgets"""
+        self.translation_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.notes_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.analysis_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.full_results_text.setPlainText(self.CONVERTING_MESSAGE)
     
     def convert_text(self):
         leiden_text = self.input_text.toPlainText()
@@ -356,7 +500,7 @@ class LeidenEpiDocGUI(QMainWindow):
             return
         
         self.status_label.setText("Converting... This may take a moment.")
-        self.output_text.setPlainText("Converting... Please wait.")
+        self._set_converting_message()
         self.convert_btn.setEnabled(False)
         
         # Run conversion in separate thread
@@ -365,14 +509,35 @@ class LeidenEpiDocGUI(QMainWindow):
         self.conversion_thread.start()
     
     def conversion_finished(self, result):
-        self.converter.last_output = result
+        """Handle the conversion result and update the UI"""
+        self.last_result = result
+        self.converter.last_output = result.get("full_text", "")
         
-        self.output_text.setPlainText(result)
+        # Check if there was an error
+        if result.get("error"):
+            self._clear_output_widgets()
+            self.full_results_text.setPlainText(result["error"])
+            self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
+            self.status_label.setText("Conversion failed. Check the Full Results tab for details.")
+            self.convert_btn.setEnabled(True)
+            return
         
-        if "Error" in result:
-            self.status_label.setText("Conversion failed. Check the output for details.")
-        else:
+        # Check if the response has the required tags
+        if result["has_tags"]:
+            # Display parsed sections
+            self.translation_text.setPlainText(result["final_translation"])
+            self.notes_text.setPlainText(result["notes"])
+            self.analysis_text.setPlainText(result["analysis"])
+            self.full_results_text.setPlainText(result["full_text"])
             self.status_label.setText("Conversion complete!")
+        else:
+            # Missing tags - display warning and show full results
+            QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
+            
+            self._clear_output_widgets()
+            self.full_results_text.setPlainText(result["full_text"])
+            self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
+            self.status_label.setText("Warning: Missing tags. See Full Results tab.")
         
         self.convert_btn.setEnabled(True)
     
