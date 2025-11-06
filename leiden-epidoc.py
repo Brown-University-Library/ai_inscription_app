@@ -263,6 +263,7 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
+    
     def create_menu_bar(self):
         menu_bar = self.menuBar()
 
