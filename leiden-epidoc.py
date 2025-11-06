@@ -20,6 +20,7 @@ CONFIG_FILE = "leiden_epidoc_config.json"
 
 class ConversionThread(QThread):
     """Thread for running conversion without blocking UI"""
+    
     finished = Signal(str)
     
     def __init__(self, converter, leiden_text):
