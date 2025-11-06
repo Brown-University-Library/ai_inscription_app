@@ -35,6 +35,11 @@ class ConversionThread(QThread):
 
 
 class LeidenToEpiDocConverter:
+    # Pre-compiled regex patterns for better performance
+    ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
+    NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
+    TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
+    
     def __init__(self):
         self.config = self.load_config()
         self.api_key = self.config.get("api_key", "")
@@ -114,10 +119,10 @@ class LeidenToEpiDocConverter:
             "error": None
         }
         
-        # Try to extract the tags using regex
-        analysis_match = re.search(r'<analysis>(.*?)</analysis>', response_text, re.DOTALL | re.IGNORECASE)
-        notes_match = re.search(r'<notes>(.*?)</notes>', response_text, re.DOTALL | re.IGNORECASE)
-        translation_match = re.search(r'<final_translation>(.*?)</final_translation>', response_text, re.DOTALL | re.IGNORECASE)
+        # Try to extract the tags using pre-compiled regex patterns
+        analysis_match = self.ANALYSIS_PATTERN.search(response_text)
+        notes_match = self.NOTES_PATTERN.search(response_text)
+        translation_match = self.TRANSLATION_PATTERN.search(response_text)
         
         # Check if all required tags are present
         if analysis_match and notes_match and translation_match:
@@ -247,6 +252,9 @@ class SaveLocationDialog(QDialog):
 
 class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
+    
+    # Constants for UI messages
+    CONVERTING_MESSAGE = "Converting... Please wait."
     
     def __init__(self):
         super().__init__()
@@ -467,6 +475,19 @@ class LeidenEpiDocGUI(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
                 self.status_label.setText(f"Error saving file: {str(e)}")
     
+    def _clear_output_widgets(self):
+        """Clear all output text widgets"""
+        self.translation_text.setPlainText("")
+        self.notes_text.setPlainText("")
+        self.analysis_text.setPlainText("")
+    
+    def _set_converting_message(self):
+        """Set converting message in all output widgets"""
+        self.translation_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.notes_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.analysis_text.setPlainText(self.CONVERTING_MESSAGE)
+        self.full_results_text.setPlainText(self.CONVERTING_MESSAGE)
+    
     def convert_text(self):
         leiden_text = self.input_text.toPlainText()
         
@@ -476,10 +497,7 @@ class LeidenEpiDocGUI(QMainWindow):
             return
         
         self.status_label.setText("Converting... This may take a moment.")
-        self.translation_text.setPlainText("Converting... Please wait.")
-        self.notes_text.setPlainText("Converting... Please wait.")
-        self.analysis_text.setPlainText("Converting... Please wait.")
-        self.full_results_text.setPlainText("Converting... Please wait.")
+        self._set_converting_message()
         self.convert_btn.setEnabled(False)
         
         # Run conversion in separate thread
@@ -494,9 +512,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Check if there was an error
         if result.get("error"):
-            self.translation_text.setPlainText("")
-            self.notes_text.setPlainText("")
-            self.analysis_text.setPlainText("")
+            self._clear_output_widgets()
             self.full_results_text.setPlainText(result["error"])
             self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
             self.status_label.setText("Conversion failed. Check the Full Results tab for details.")
@@ -518,9 +534,7 @@ class LeidenEpiDocGUI(QMainWindow):
                           "Displaying the full unseparated response in the Full Results tab.")
             QMessageBox.warning(self, "Missing Tags", warning_msg)
             
-            self.translation_text.setPlainText("")
-            self.notes_text.setPlainText("")
-            self.analysis_text.setPlainText("")
+            self._clear_output_widgets()
             self.full_results_text.setPlainText(result["full_text"])
             self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
             self.status_label.setText("Warning: Missing tags. See Full Results tab.")
