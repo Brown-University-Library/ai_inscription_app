@@ -94,6 +94,7 @@ class LeidenToEpiDocConverter:
 
 class APISettingsDialog(QDialog):
     """Dialog for API settings"""
+    
     def __init__(self, parent, converter):
         super().__init__(parent)
         self.converter = converter
@@ -157,6 +158,7 @@ class APISettingsDialog(QDialog):
 
 class SaveLocationDialog(QDialog):
     """Dialog for save location settings"""
+    
     def __init__(self, parent, converter):
         super().__init__(parent)
         self.converter = converter
@@ -207,6 +209,8 @@ class SaveLocationDialog(QDialog):
 
 
 class LeidenEpiDocGUI(QMainWindow):
+    """Main application window for Leiden to EpiDoc conversion"""
+    
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
