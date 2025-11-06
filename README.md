@@ -42,12 +42,12 @@ pip install -e .
 
 Using `uv`:
 ```bash
-uv run python leiden-epidoc-pyside.py
+uv run python leiden-epidoc.py
 ```
 
 Or directly with Python:
 ```bash
-python leiden-epidoc-pyside.py
+python leiden-epidoc.py
 ```
 
 ### First Time Setup

@@ -20,6 +20,7 @@ CONFIG_FILE = "leiden_epidoc_config.json"
 
 class ConversionThread(QThread):
     """Thread for running conversion without blocking UI"""
+    
     finished = Signal(str)
     
     def __init__(self, converter, leiden_text):
@@ -93,6 +94,7 @@ class LeidenToEpiDocConverter:
 
 class APISettingsDialog(QDialog):
     """Dialog for API settings"""
+    
     def __init__(self, parent, converter):
         super().__init__(parent)
         self.converter = converter
@@ -156,6 +158,7 @@ class APISettingsDialog(QDialog):
 
 class SaveLocationDialog(QDialog):
     """Dialog for save location settings"""
+    
     def __init__(self, parent, converter):
         super().__init__(parent)
         self.converter = converter
@@ -206,6 +209,8 @@ class SaveLocationDialog(QDialog):
 
 
 class LeidenEpiDocGUI(QMainWindow):
+    """Main application window for Leiden to EpiDoc conversion"""
+    
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
@@ -263,6 +268,7 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
+    
     def create_menu_bar(self):
         menu_bar = self.menuBar()
 
