@@ -9,7 +9,7 @@ This application provides a user-friendly GUI for converting inscriptions writte
 ## Features
 
 - **AI-Powered Conversion**: Uses Claude AI for intelligent Leiden to EpiDoc translation
-- **Native GUI**: Clean, responsive interface built with Qt
+- **Native GUI**: Clean, responsive interface built with PySide6/Qt
 - **Unicode Support**: Full support for Greek, Hebrew, Arabic, and other ancient scripts
 - **RTL Languages**: Automatic right-to-left text rendering for Hebrew, Arabic, and Syriac
 - **Non-Blocking Operations**: Conversions run in background threads to keep UI responsive
@@ -101,7 +101,7 @@ Settings are stored in `leiden_epidoc_config.json` in the application directory:
 
 ### Technology Stack
 
-- **Qt**: Cross-platform GUI framework
+- **PySide6**: Qt bindings for Python (GUI framework)
 - **Anthropic API**: Claude AI for conversion logic
 - **Python 3.12+**: Modern Python with type hints
 
