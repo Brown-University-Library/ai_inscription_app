@@ -255,6 +255,9 @@ class LeidenEpiDocGUI(QMainWindow):
     
     # Constants for UI messages
     CONVERTING_MESSAGE = "Converting... Please wait."
+    MISSING_TAGS_WARNING = ("Warning: The response from the AI did not include the expected "
+                           "tags (<analysis>, <notes>, <final_translation>). "
+                           "Displaying the full unseparated response in the Full Results tab.")
     
     def __init__(self):
         super().__init__()
@@ -435,7 +438,7 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def save_translation(self):
         """Save the translation (final_translation) to a file"""
-        if not self.last_result or not self.last_result.get("final_translation"):
+        if not self.last_result or not self.last_result.get("final_translation", "").strip():
             QMessageBox.warning(self, "No Translation", 
                               "No translation to save. Please convert text first.")
             return
@@ -529,10 +532,7 @@ class LeidenEpiDocGUI(QMainWindow):
             self.status_label.setText("Conversion complete!")
         else:
             # Missing tags - display warning and show full results
-            warning_msg = ("Warning: The response from the AI did not include the expected "
-                          "tags (<analysis>, <notes>, <final_translation>). "
-                          "Displaying the full unseparated response in the Full Results tab.")
-            QMessageBox.warning(self, "Missing Tags", warning_msg)
+            QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
             
             self._clear_output_widgets()
             self.full_results_text.setPlainText(result["full_text"])
