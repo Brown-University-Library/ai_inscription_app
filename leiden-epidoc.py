@@ -586,22 +586,6 @@ class LeidenEpiDocGUI(QMainWindow):
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        # Header section for both panes
-        header_layout = QHBoxLayout()
-        
-        # Left header
-        translation_label = QLabel("Final Translation:")
-        header_layout.addWidget(translation_label)
-        
-        save_translation_btn = QPushButton("Save Translation to File")
-        save_translation_btn.clicked.connect(self.save_translation)
-        header_layout.addWidget(save_translation_btn)
-        
-        # Spacer to separate left and right headers (matching the splitter proportions)
-        header_layout.addStretch(1)
-        
-        main_layout.addLayout(header_layout)
-        
         # Create a horizontal splitter for the two panes
         splitter = QSplitter(Qt.Horizontal)
         
@@ -609,6 +593,19 @@ class LeidenEpiDocGUI(QMainWindow):
         left_pane = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Left pane header with consistent height
+        left_header_layout = QVBoxLayout()
+        left_header_layout.setSpacing(0)
+        
+        translation_label = QLabel("Final Translation:")
+        left_header_layout.addWidget(translation_label)
+        
+        save_translation_btn = QPushButton("Save Translation to File")
+        save_translation_btn.clicked.connect(self.save_translation)
+        left_header_layout.addWidget(save_translation_btn)
+        
+        left_layout.addLayout(left_header_layout)
         
         self.translation_text = QTextEdit()
         self.translation_text.setReadOnly(True)
@@ -623,6 +620,20 @@ class LeidenEpiDocGUI(QMainWindow):
         right_pane = QWidget()
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Right pane header - empty spacer to match left pane header height
+        right_header_layout = QVBoxLayout()
+        right_header_layout.setSpacing(0)
+        
+        # Add empty label and button-sized spacer to match left header
+        empty_label = QLabel("")
+        right_header_layout.addWidget(empty_label)
+        
+        empty_spacer = QLabel("")
+        empty_spacer.setMinimumHeight(save_translation_btn.sizeHint().height())
+        right_header_layout.addWidget(empty_spacer)
+        
+        right_layout.addLayout(right_header_layout)
         
         self.tabs = QTabWidget()
         
