@@ -790,7 +790,19 @@ class LeidenEpiDocGUI(QMainWindow):
                               "Please enter or load Leiden text first.")
             return
         
-        self.status_label.setText("Converting... This may take a moment.")
+        # Show status about custom prompts
+        custom_status = []
+        if self.converter.custom_prompt:
+            custom_status.append("custom prompt")
+        if self.converter.custom_examples:
+            custom_status.append("custom examples")
+        
+        if custom_status:
+            status_msg = f"Converting with {' and '.join(custom_status)}..."
+        else:
+            status_msg = "Converting with default prompt and examples..."
+        
+        self.status_label.setText(status_msg)
         self._set_converting_message()
         self.convert_btn.setEnabled(False)
         
@@ -846,13 +858,21 @@ class LeidenEpiDocGUI(QMainWindow):
         """Show the prompt editor dialog"""
         dialog = PromptEditorDialog(self, self.converter)
         if dialog.exec():
-            self.status_label.setText("Prompt settings updated.")
+            # Update status to show whether custom prompt is active
+            if self.converter.custom_prompt:
+                self.status_label.setText("Custom prompt is now active and will be used for conversions.")
+            else:
+                self.status_label.setText("Prompt settings updated.")
     
     def show_examples_editor(self):
         """Show the examples editor dialog"""
         dialog = ExamplesEditorDialog(self, self.converter)
         if dialog.exec():
-            self.status_label.setText("Examples settings updated.")
+            # Update status to show whether custom examples are active
+            if self.converter.custom_examples:
+                self.status_label.setText("Custom examples are now active and will be used for conversions.")
+            else:
+                self.status_label.setText("Examples settings updated.")
 
 
 def main():
