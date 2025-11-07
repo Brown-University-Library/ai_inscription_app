@@ -276,7 +276,9 @@ class PromptEditorDialog(QDialog):
         
         # Text editor
         self.prompt_editor = QTextEdit()
-        self.prompt_editor.setPlainText(SYSTEM_INSTRUCTION)
+        # Use custom prompt if set, otherwise use default
+        current_prompt = self.converter.custom_prompt if self.converter.custom_prompt else SYSTEM_INSTRUCTION
+        self.prompt_editor.setPlainText(current_prompt)
         layout.addWidget(self.prompt_editor)
         
         # File name input
@@ -401,7 +403,9 @@ class ExamplesEditorDialog(QDialog):
         
         # Text editor
         self.examples_editor = QTextEdit()
-        self.examples_editor.setPlainText(EXAMPLES_TEXT)
+        # Use custom examples if set, otherwise use default
+        current_examples = self.converter.custom_examples if self.converter.custom_examples else EXAMPLES_TEXT
+        self.examples_editor.setPlainText(current_examples)
         layout.addWidget(self.examples_editor)
         
         # File name input
