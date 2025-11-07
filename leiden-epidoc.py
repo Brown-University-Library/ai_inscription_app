@@ -86,6 +86,14 @@ class LeidenToEpiDocConverter:
             prompt = self.custom_prompt if self.custom_prompt else SYSTEM_INSTRUCTION
             examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
             
+            # Debug logging to help troubleshoot
+            print(f"[DEBUG] Using custom prompt: {self.custom_prompt is not None}")
+            print(f"[DEBUG] Using custom examples: {self.custom_examples is not None}")
+            if self.custom_prompt:
+                print(f"[DEBUG] Custom prompt preview: {self.custom_prompt[:50]}...")
+            if self.custom_examples:
+                print(f"[DEBUG] Custom examples preview: {self.custom_examples[:50]}...")
+            
             message = client.messages.create(
                 model=self.model,
                 max_tokens=8192,
@@ -328,6 +336,8 @@ class PromptEditorDialog(QDialog):
                 # Extract name from file path
                 file_name = os.path.splitext(os.path.basename(file_path))[0]
                 self.name_input.setText(file_name)
+                # Also set the custom prompt to be used
+                self.converter.custom_prompt = content
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error loading prompt: {str(e)}")
     
@@ -367,7 +377,9 @@ class PromptEditorDialog(QDialog):
                 f.write(self.prompt_editor.toPlainText())
             self.current_prompt_file = file_path
             self.name_input.setText(prompt_name)
-            QMessageBox.information(self, "Success", f"Prompt saved as '{file_name}'")
+            # Also set the custom prompt to be used
+            self.converter.custom_prompt = self.prompt_editor.toPlainText()
+            QMessageBox.information(self, "Success", f"Prompt saved as '{file_name}' and will be used for conversions.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error saving prompt: {str(e)}")
     
@@ -455,6 +467,8 @@ class ExamplesEditorDialog(QDialog):
                 # Extract name from file path
                 file_name = os.path.splitext(os.path.basename(file_path))[0]
                 self.name_input.setText(file_name)
+                # Also set the custom examples to be used
+                self.converter.custom_examples = content
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error loading examples: {str(e)}")
     
@@ -494,7 +508,9 @@ class ExamplesEditorDialog(QDialog):
                 f.write(self.examples_editor.toPlainText())
             self.current_examples_file = file_path
             self.name_input.setText(examples_name)
-            QMessageBox.information(self, "Success", f"Examples saved as '{file_name}'")
+            # Also set the custom examples to be used
+            self.converter.custom_examples = self.examples_editor.toPlainText()
+            QMessageBox.information(self, "Success", f"Examples saved as '{file_name}' and will be used for conversions.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error saving examples: {str(e)}")
     
