@@ -10,7 +10,7 @@ from leiden_prompts import SYSTEM_INSTRUCTION, EXAMPLES_TEXT
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
-    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter
+    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter, QInputDialog
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -46,6 +46,9 @@ class LeidenToEpiDocConverter:
         self.model = self.config.get("model", "claude-sonnet-4-20250514")
         self.save_location = self.config.get("save_location", str(Path.home()))
         self.last_output = ""
+        # Custom prompt and examples (None means use defaults from leiden_prompts.py)
+        self.custom_prompt = None
+        self.custom_examples = None
         
     def load_config(self):
         """Load configuration from file if it exists"""
@@ -79,18 +82,22 @@ class LeidenToEpiDocConverter:
         try:
             client = anthropic.Anthropic(api_key=self.api_key)
             
+            # Use custom prompt/examples if set, otherwise use defaults
+            prompt = self.custom_prompt if self.custom_prompt else SYSTEM_INSTRUCTION
+            examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
+            
             message = client.messages.create(
                 model=self.model,
                 max_tokens=8192,
                 temperature=0,
-                system=SYSTEM_INSTRUCTION,
+                system=prompt,
                 messages=[
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "text",
-                                "text": f"Below are example inputs written according to the Leiden convention and the corresponding outputs in XML following the EpiDoc convention.\n{EXAMPLES_TEXT}\n\nHere is the text in Leiden Conventions format that you need to translate: \n\n<Input>\n{leiden}\n</Input>\n"
+                                "text": f"Below are example inputs written according to the Leiden convention and the corresponding outputs in XML following the EpiDoc convention.\n{examples}\n\nHere is the text in Leiden Conventions format that you need to translate: \n\n<Input>\n{leiden}\n</Input>\n"
                             }
                         ]
                     }
@@ -250,6 +257,256 @@ class SaveLocationDialog(QDialog):
         self.accept()
 
 
+class PromptEditorDialog(QDialog):
+    """Dialog for editing and managing prompts"""
+    
+    def __init__(self, parent, converter):
+        super().__init__(parent)
+        self.converter = converter
+        self.current_prompt_file = None
+        self.setWindowTitle("Edit Prompt")
+        self.setModal(True)
+        self.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout()
+        
+        # Info label
+        info_label = QLabel("Edit the system instruction prompt for the LLM:")
+        layout.addWidget(info_label)
+        
+        # Text editor
+        self.prompt_editor = QTextEdit()
+        self.prompt_editor.setPlainText(SYSTEM_INSTRUCTION)
+        layout.addWidget(self.prompt_editor)
+        
+        # File name input
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Prompt Name:")
+        name_layout.addWidget(name_label)
+        self.name_input = QLineEdit()
+        self.name_input.setText("Custom Prompt")
+        name_layout.addWidget(self.name_input)
+        layout.addLayout(name_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        load_btn = QPushButton("Load Prompt")
+        load_btn.clicked.connect(self.load_prompt)
+        button_layout.addWidget(load_btn)
+        
+        save_btn = QPushButton("Save Prompt")
+        save_btn.clicked.connect(self.save_prompt)
+        button_layout.addWidget(save_btn)
+        
+        use_btn = QPushButton("Use This Prompt")
+        use_btn.clicked.connect(self.use_prompt)
+        button_layout.addWidget(use_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+    
+    def load_prompt(self):
+        """Load a prompt from file"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Prompt", "", "Text Files (*.txt);;All Files (*)")
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.prompt_editor.setPlainText(content)
+                self.current_prompt_file = file_path
+                # Extract name from file path
+                file_name = os.path.splitext(os.path.basename(file_path))[0]
+                self.name_input.setText(file_name)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error loading prompt: {str(e)}")
+    
+    def save_prompt(self):
+        """Save the current prompt to a file"""
+        prompt_name = self.name_input.text().strip()
+        if not prompt_name:
+            QMessageBox.warning(self, "No Name", "Please enter a name for the prompt.")
+            return
+        
+        # Default to .txt extension
+        file_name = f"{prompt_name}.txt"
+        file_path = os.path.join(self.converter.save_location, file_name)
+        
+        # Check if file exists
+        if os.path.exists(file_path):
+            reply = QMessageBox.question(
+                self, "File Exists",
+                f"The file '{file_name}' already exists. Do you want to overwrite it?",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            
+            if reply == QMessageBox.No:
+                # Ask for new name
+                new_name, ok = self._prompt_for_new_name(prompt_name)
+                if ok and new_name:
+                    prompt_name = new_name
+                    file_name = f"{prompt_name}.txt"
+                    file_path = os.path.join(self.converter.save_location, file_name)
+                else:
+                    return
+            elif reply == QMessageBox.Cancel:
+                return
+        
+        # Save the file
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(self.prompt_editor.toPlainText())
+            self.current_prompt_file = file_path
+            self.name_input.setText(prompt_name)
+            QMessageBox.information(self, "Success", f"Prompt saved as '{file_name}'")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error saving prompt: {str(e)}")
+    
+    def _prompt_for_new_name(self, current_name):
+        """Prompt user for a new file name"""
+        return QInputDialog.getText(
+            self, "New Name", "Enter a new name for the prompt:", 
+            QLineEdit.Normal, current_name)
+    
+    def use_prompt(self):
+        """Use the current prompt in the converter"""
+        self.converter.custom_prompt = self.prompt_editor.toPlainText()
+        QMessageBox.information(self, "Success", "Prompt updated successfully!")
+        self.accept()
+
+
+class ExamplesEditorDialog(QDialog):
+    """Dialog for editing and managing examples"""
+    
+    def __init__(self, parent, converter):
+        super().__init__(parent)
+        self.converter = converter
+        self.current_examples_file = None
+        self.setWindowTitle("Edit Examples")
+        self.setModal(True)
+        self.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout()
+        
+        # Info label
+        info_label = QLabel("Edit the example conversions for the LLM:")
+        layout.addWidget(info_label)
+        
+        # Text editor
+        self.examples_editor = QTextEdit()
+        self.examples_editor.setPlainText(EXAMPLES_TEXT)
+        layout.addWidget(self.examples_editor)
+        
+        # File name input
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Examples Name:")
+        name_layout.addWidget(name_label)
+        self.name_input = QLineEdit()
+        self.name_input.setText("Custom Examples")
+        name_layout.addWidget(self.name_input)
+        layout.addLayout(name_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        load_btn = QPushButton("Load Examples")
+        load_btn.clicked.connect(self.load_examples)
+        button_layout.addWidget(load_btn)
+        
+        save_btn = QPushButton("Save Examples")
+        save_btn.clicked.connect(self.save_examples)
+        button_layout.addWidget(save_btn)
+        
+        use_btn = QPushButton("Use These Examples")
+        use_btn.clicked.connect(self.use_examples)
+        button_layout.addWidget(use_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+    
+    def load_examples(self):
+        """Load examples from file"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Examples", "", "Text Files (*.txt);;All Files (*)")
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.examples_editor.setPlainText(content)
+                self.current_examples_file = file_path
+                # Extract name from file path
+                file_name = os.path.splitext(os.path.basename(file_path))[0]
+                self.name_input.setText(file_name)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error loading examples: {str(e)}")
+    
+    def save_examples(self):
+        """Save the current examples to a file"""
+        examples_name = self.name_input.text().strip()
+        if not examples_name:
+            QMessageBox.warning(self, "No Name", "Please enter a name for the examples.")
+            return
+        
+        # Default to .txt extension
+        file_name = f"{examples_name}.txt"
+        file_path = os.path.join(self.converter.save_location, file_name)
+        
+        # Check if file exists
+        if os.path.exists(file_path):
+            reply = QMessageBox.question(
+                self, "File Exists",
+                f"The file '{file_name}' already exists. Do you want to overwrite it?",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            
+            if reply == QMessageBox.No:
+                # Ask for new name
+                new_name, ok = self._prompt_for_new_name(examples_name)
+                if ok and new_name:
+                    examples_name = new_name
+                    file_name = f"{examples_name}.txt"
+                    file_path = os.path.join(self.converter.save_location, file_name)
+                else:
+                    return
+            elif reply == QMessageBox.Cancel:
+                return
+        
+        # Save the file
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(self.examples_editor.toPlainText())
+            self.current_examples_file = file_path
+            self.name_input.setText(examples_name)
+            QMessageBox.information(self, "Success", f"Examples saved as '{file_name}'")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error saving examples: {str(e)}")
+    
+    def _prompt_for_new_name(self, current_name):
+        """Prompt user for a new file name"""
+        return QInputDialog.getText(
+            self, "New Name", "Enter a new name for the examples:", 
+            QLineEdit.Normal, current_name)
+    
+    def use_examples(self):
+        """Use the current examples in the converter"""
+        self.converter.custom_examples = self.examples_editor.toPlainText()
+        QMessageBox.information(self, "Success", "Examples updated successfully!")
+        self.accept()
+
+
 class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
     
@@ -403,6 +660,13 @@ class LeidenEpiDocGUI(QMainWindow):
         save_location_action = QAction("Set Save Location", self)
         save_location_action.triggered.connect(self.show_save_location_settings)
         settings_menu.addAction(save_location_action)
+        settings_menu.addSeparator()
+        edit_prompt_action = QAction("Edit Prompt", self)
+        edit_prompt_action.triggered.connect(self.show_prompt_editor)
+        settings_menu.addAction(edit_prompt_action)
+        edit_examples_action = QAction("Edit Examples", self)
+        edit_examples_action.triggered.connect(self.show_examples_editor)
+        settings_menu.addAction(edit_examples_action)
 
     def toggle_word_wrap(self):
         enabled = self.word_wrap_action.isChecked()
@@ -550,6 +814,18 @@ class LeidenEpiDocGUI(QMainWindow):
         dialog = SaveLocationDialog(self, self.converter)
         if dialog.exec():
             self.status_label.setText("Save location settings updated.")
+    
+    def show_prompt_editor(self):
+        """Show the prompt editor dialog"""
+        dialog = PromptEditorDialog(self, self.converter)
+        if dialog.exec():
+            self.status_label.setText("Prompt settings updated.")
+    
+    def show_examples_editor(self):
+        """Show the examples editor dialog"""
+        dialog = ExamplesEditorDialog(self, self.converter)
+        if dialog.exec():
+            self.status_label.setText("Examples settings updated.")
 
 
 def main():
