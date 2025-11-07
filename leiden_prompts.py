@@ -251,6 +251,7 @@ This appears to be an early Christian inscription invoking God as helper. The te
 <lb/>Εἶς θεὸ<supplied reason="lost">ς</supplied> <supplied reason="lost">μόνο</supplied><lb break="no"/>ς ὁ βοηθ<supplied reason="lost">ῶν</supplied>
 <lb/>Γαδιωναν <lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> Ἰουλιανῷ
 <lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> πᾶσιν τοῖς ἀξ<lb break="no"/>ίοις
+<lb/><foreign xml:lang="heb">פעלהבדה</foreign>
 </final_translation>
 </ideal_output>
 </example>
