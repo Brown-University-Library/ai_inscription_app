@@ -1,11 +1,16 @@
 import os
 import json
 import sys
+import logging
 import anthropic
 from pathlib import Path
 import traceback
 import re
 from leiden_prompts import SYSTEM_INSTRUCTION, EXAMPLES_TEXT
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -87,12 +92,12 @@ class LeidenToEpiDocConverter:
             examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
             
             # Debug logging to help troubleshoot
-            print(f"[DEBUG] Using custom prompt: {self.custom_prompt is not None}")
-            print(f"[DEBUG] Using custom examples: {self.custom_examples is not None}")
+            logger.info(f"Using custom prompt: {self.custom_prompt is not None}")
+            logger.info(f"Using custom examples: {self.custom_examples is not None}")
             if self.custom_prompt:
-                print(f"[DEBUG] Custom prompt preview: {self.custom_prompt[:50]}...")
+                logger.debug(f"Custom prompt preview: {self.custom_prompt[:50]}...")
             if self.custom_examples:
-                print(f"[DEBUG] Custom examples preview: {self.custom_examples[:50]}...")
+                logger.debug(f"Custom examples preview: {self.custom_examples[:50]}...")
             
             message = client.messages.create(
                 model=self.model,
@@ -379,7 +384,8 @@ class PromptEditorDialog(QDialog):
             self.name_input.setText(prompt_name)
             # Also set the custom prompt to be used
             self.converter.custom_prompt = self.prompt_editor.toPlainText()
-            QMessageBox.information(self, "Success", f"Prompt saved as '{file_name}' and will be used for conversions.")
+            saved_filename = os.path.basename(file_path)
+            QMessageBox.information(self, "Success", f"Prompt saved as '{saved_filename}' and will be used for conversions.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error saving prompt: {str(e)}")
     
@@ -510,7 +516,8 @@ class ExamplesEditorDialog(QDialog):
             self.name_input.setText(examples_name)
             # Also set the custom examples to be used
             self.converter.custom_examples = self.examples_editor.toPlainText()
-            QMessageBox.information(self, "Success", f"Examples saved as '{file_name}' and will be used for conversions.")
+            saved_filename = os.path.basename(file_path)
+            QMessageBox.information(self, "Success", f"Examples saved as '{saved_filename}' and will be used for conversions.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error saving examples: {str(e)}")
     
