@@ -230,13 +230,29 @@ EXAMPLES_TEXT = """<examples>
 οις 
 </Input>
 <ideal_output>
-<div type="edition" subtype="transcription" ana="b1">
-                <p>
-                    <lb/>Εἶς θεὸ<supplied reason="lost">ς</supplied> <supplied reason="lost">μόνο</supplied><lb break="no"/>ς ὁ
-                        βοηθ<supplied reason="lost">ῶν</supplied>
-                    <lb/>Γαδιωναν <lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> Ἰουλιανῷ
-                            <lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> πᾶσιν τοῖς ἀξ<lb break="no"/>ίοις <lb/><foreign xml:lang="heb">פעלהבדה</foreign></p>
-            </div>
+<analysis>
+Reading through the text, I identify the following Leiden Convention symbols:
+- Square brackets [ς μόνο-] and [ῶν] indicate supplied lost text
+- Hyphens at line ends indicate word continuation across lines
+- Parentheses κ(αὶ) indicate abbreviated text to be expanded
+
+The text appears to be Greek with some Hebrew at the end. I will:
+1. Use <supplied reason="lost"> for text in square brackets
+2. Use <lb break="no"/> for line breaks within words
+3. Use <expan><abbr>...</abbr><ex>...</ex></expan> for abbreviations
+4. Use <foreign xml:lang="heb"> for the Hebrew text
+</analysis>
+
+<notes>
+This appears to be an early Christian inscription invoking God as helper. The text shows typical features of Byzantine-era inscriptions with standard abbreviations for καὶ. Line breaks occur mid-word in lines 1-2 and 5-6, requiring <lb break="no"/> tags. The Hebrew text at the end suggests a bilingual context.
+</notes>
+
+<final_translation>
+<lb/>Εἶς θεὸ<supplied reason="lost">ς</supplied> <supplied reason="lost">μόνο</supplied><lb break="no"/>ς ὁ βοηθ<supplied reason="lost">ῶν</supplied>
+<lb/>Γαδιωναν <lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> Ἰουλιανῷ
+<lb/><expan><abbr>κ</abbr><ex>αὶ</ex></expan> πᾶσιν τοῖς ἀξ<lb break="no"/>ίοις
+<lb/><foreign xml:lang="heb">פעלהבדה</foreign>
+</final_translation>
 </ideal_output>
 </example>
 </examples>"""
