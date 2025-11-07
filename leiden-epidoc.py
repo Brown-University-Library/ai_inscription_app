@@ -586,6 +586,22 @@ class LeidenEpiDocGUI(QMainWindow):
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
+        # Header section for both panes
+        header_layout = QHBoxLayout()
+        
+        # Left header
+        translation_label = QLabel("Final Translation:")
+        header_layout.addWidget(translation_label)
+        
+        save_translation_btn = QPushButton("Save Translation to File")
+        save_translation_btn.clicked.connect(self.save_translation)
+        header_layout.addWidget(save_translation_btn)
+        
+        # Spacer to separate left and right headers (matching the splitter proportions)
+        header_layout.addStretch(1)
+        
+        main_layout.addLayout(header_layout)
+        
         # Create a horizontal splitter for the two panes
         splitter = QSplitter(Qt.Horizontal)
         
@@ -593,13 +609,6 @@ class LeidenEpiDocGUI(QMainWindow):
         left_pane = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
-        
-        translation_label = QLabel("Final Translation:")
-        left_layout.addWidget(translation_label)
-        
-        save_translation_btn = QPushButton("Save Translation to File")
-        save_translation_btn.clicked.connect(self.save_translation)
-        left_layout.addWidget(save_translation_btn)
         
         self.translation_text = QTextEdit()
         self.translation_text.setReadOnly(True)
