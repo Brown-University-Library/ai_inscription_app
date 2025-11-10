@@ -605,6 +605,12 @@ class LeidenEpiDocGUI(QMainWindow):
         save_translation_btn.clicked.connect(self.save_translation)
         left_header_layout.addWidget(save_translation_btn)
         
+        # Add extra spacer to account for tab bar height on the right pane
+        # The tab bar is approximately 26-28 pixels, so we add a matching spacer
+        tab_bar_spacer = QLabel("")
+        tab_bar_spacer.setFixedHeight(28)
+        left_header_layout.addWidget(tab_bar_spacer)
+        
         left_layout.addLayout(left_header_layout)
         
         self.translation_text = QTextEdit()
@@ -632,6 +638,11 @@ class LeidenEpiDocGUI(QMainWindow):
         empty_spacer = QLabel("")
         empty_spacer.setMinimumHeight(save_translation_btn.sizeHint().height())
         right_header_layout.addWidget(empty_spacer)
+        
+        # Add matching spacer for the tab bar spacer on left side
+        tab_bar_match_spacer = QLabel("")
+        tab_bar_match_spacer.setFixedHeight(28)
+        right_header_layout.addWidget(tab_bar_match_spacer)
         
         right_layout.addLayout(right_header_layout)
         
