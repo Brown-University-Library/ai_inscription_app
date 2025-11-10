@@ -582,30 +582,39 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_text)
         main_layout.addWidget(self.convert_btn)
         
-        # Output section with new layout structure
+        # Output section with splitter
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        # Top row: Button on left, Tabs on right
-        top_row_layout = QHBoxLayout()
+        # Create a horizontal splitter for the two panes
+        splitter = QSplitter(Qt.Horizontal)
         
-        # Left side of top row: Button
-        button_container = QWidget()
-        button_layout = QVBoxLayout()
-        button_layout.setContentsMargins(0, 0, 0, 0)
+        # Left pane: Final Translation
+        left_pane = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
         
         translation_label = QLabel("Final Translation:")
-        button_layout.addWidget(translation_label)
+        left_layout.addWidget(translation_label)
         
         save_translation_btn = QPushButton("Save Translation to File")
         save_translation_btn.clicked.connect(self.save_translation)
-        button_layout.addWidget(save_translation_btn)
-        button_layout.addStretch()  # Push button to top
+        left_layout.addWidget(save_translation_btn)
         
-        button_container.setLayout(button_layout)
-        top_row_layout.addWidget(button_container)
+        self.translation_text = QTextEdit()
+        self.translation_text.setReadOnly(True)
+        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_layout.addWidget(self.translation_text)
         
-        # Right side of top row: Tabs  
+        left_pane.setLayout(left_layout)
+        splitter.addWidget(left_pane)
+        
+        # Right pane: Tabs for Notes, Analysis, Full Results
+        right_pane = QWidget()
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.tabs = QTabWidget()
         
         # Notes tab
@@ -629,16 +638,14 @@ class LeidenEpiDocGUI(QMainWindow):
         self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.tabs.addTab(self.full_results_text, "Full Results")
         
-        top_row_layout.addWidget(self.tabs)
+        right_layout.addWidget(self.tabs)
+        right_pane.setLayout(right_layout)
+        splitter.addWidget(right_pane)
         
-        main_layout.addLayout(top_row_layout)
+        # Set initial sizes for splitter (50/50 split)
+        splitter.setSizes([600, 600])
         
-        # Bottom row: Translation text area
-        self.translation_text = QTextEdit()
-        self.translation_text.setReadOnly(True)
-        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        main_layout.addWidget(self.translation_text)
+        main_layout.addWidget(splitter)
         
         # Status bar
         self.status_label = QLabel("Ready")
