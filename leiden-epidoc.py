@@ -582,70 +582,30 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_text)
         main_layout.addWidget(self.convert_btn)
         
-        # Output section with splitter
+        # Output section with new layout structure
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        # Create a horizontal splitter for the two panes
-        splitter = QSplitter(Qt.Horizontal)
+        # Top row: Button on left, Tabs on right
+        top_row_layout = QHBoxLayout()
         
-        # Left pane: Final Translation
-        left_pane = QWidget()
-        left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Left pane header with consistent height
-        left_header_layout = QVBoxLayout()
-        left_header_layout.setSpacing(0)
+        # Left side of top row: Button
+        button_container = QWidget()
+        button_layout = QVBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
         
         translation_label = QLabel("Final Translation:")
-        left_header_layout.addWidget(translation_label)
+        button_layout.addWidget(translation_label)
         
         save_translation_btn = QPushButton("Save Translation to File")
         save_translation_btn.clicked.connect(self.save_translation)
-        left_header_layout.addWidget(save_translation_btn)
+        button_layout.addWidget(save_translation_btn)
+        button_layout.addStretch()  # Push button to top
         
-        # Add extra spacer to account for tab bar height on the right pane
-        # The tab bar is approximately 26-28 pixels, so we add a matching spacer
-        tab_bar_spacer = QLabel("")
-        tab_bar_spacer.setFixedHeight(28)
-        left_header_layout.addWidget(tab_bar_spacer)
+        button_container.setLayout(button_layout)
+        top_row_layout.addWidget(button_container)
         
-        left_layout.addLayout(left_header_layout)
-        
-        self.translation_text = QTextEdit()
-        self.translation_text.setReadOnly(True)
-        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        left_layout.addWidget(self.translation_text)
-        
-        left_pane.setLayout(left_layout)
-        splitter.addWidget(left_pane)
-        
-        # Right pane: Tabs for Notes, Analysis, Full Results
-        right_pane = QWidget()
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Right pane header - empty spacer to match left pane header height
-        right_header_layout = QVBoxLayout()
-        right_header_layout.setSpacing(0)
-        
-        # Add empty label and button-sized spacer to match left header
-        empty_label = QLabel("")
-        right_header_layout.addWidget(empty_label)
-        
-        empty_spacer = QLabel("")
-        empty_spacer.setMinimumHeight(save_translation_btn.sizeHint().height())
-        right_header_layout.addWidget(empty_spacer)
-        
-        # Add matching spacer for the tab bar spacer on left side
-        tab_bar_match_spacer = QLabel("")
-        tab_bar_match_spacer.setFixedHeight(28)
-        right_header_layout.addWidget(tab_bar_match_spacer)
-        
-        right_layout.addLayout(right_header_layout)
-        
+        # Right side of top row: Tabs  
         self.tabs = QTabWidget()
         
         # Notes tab
@@ -669,14 +629,16 @@ class LeidenEpiDocGUI(QMainWindow):
         self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.tabs.addTab(self.full_results_text, "Full Results")
         
-        right_layout.addWidget(self.tabs)
-        right_pane.setLayout(right_layout)
-        splitter.addWidget(right_pane)
+        top_row_layout.addWidget(self.tabs)
         
-        # Set initial sizes for splitter (50/50 split)
-        splitter.setSizes([600, 600])
+        main_layout.addLayout(top_row_layout)
         
-        main_layout.addWidget(splitter)
+        # Bottom row: Translation text area
+        self.translation_text = QTextEdit()
+        self.translation_text.setReadOnly(True)
+        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        main_layout.addWidget(self.translation_text)
         
         # Status bar
         self.status_label = QLabel("Ready")
