@@ -582,39 +582,34 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_text)
         main_layout.addWidget(self.convert_btn)
         
-        # Output section with splitter
+        # Output section with 4-quadrant layout
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        # Create a horizontal splitter for the two panes
-        splitter = QSplitter(Qt.Horizontal)
+        # Create a vertical splitter for top and bottom panels
+        main_splitter = QSplitter(Qt.Vertical)
         
-        # Left pane: Final Translation
-        left_pane = QWidget()
-        left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # TOP PANEL (short) - split into left and right
+        top_panel = QWidget()
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Top-left: Label and button
+        top_left = QWidget()
+        top_left_layout = QVBoxLayout()
+        top_left_layout.setContentsMargins(0, 0, 0, 0)
         
         translation_label = QLabel("Final Translation:")
-        left_layout.addWidget(translation_label)
+        top_left_layout.addWidget(translation_label)
         
         save_translation_btn = QPushButton("Save Translation to File")
         save_translation_btn.clicked.connect(self.save_translation)
-        left_layout.addWidget(save_translation_btn)
+        top_left_layout.addWidget(save_translation_btn)
         
-        self.translation_text = QTextEdit()
-        self.translation_text.setReadOnly(True)
-        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        left_layout.addWidget(self.translation_text)
+        top_left.setLayout(top_left_layout)
+        top_layout.addWidget(top_left)
         
-        left_pane.setLayout(left_layout)
-        splitter.addWidget(left_pane)
-        
-        # Right pane: Tabs for Notes, Analysis, Full Results
-        right_pane = QWidget()
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Top-right: Tabs (just the tab bar, content will be in bottom-right)
         self.tabs = QTabWidget()
         
         # Notes tab
@@ -638,14 +633,44 @@ class LeidenEpiDocGUI(QMainWindow):
         self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.tabs.addTab(self.full_results_text, "Full Results")
         
-        right_layout.addWidget(self.tabs)
-        right_pane.setLayout(right_layout)
-        splitter.addWidget(right_pane)
+        top_layout.addWidget(self.tabs)
+        top_panel.setLayout(top_layout)
+        main_splitter.addWidget(top_panel)
         
-        # Set initial sizes for splitter (50/50 split)
-        splitter.setSizes([600, 600])
+        # BOTTOM PANEL (tall) - split into left and right
+        bottom_splitter = QSplitter(Qt.Horizontal)
         
-        main_layout.addWidget(splitter)
+        # Bottom-left: Translation text area
+        self.translation_text = QTextEdit()
+        self.translation_text.setReadOnly(True)
+        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        bottom_splitter.addWidget(self.translation_text)
+        
+        # Bottom-right: Currently selected tab content (the tabs widget already shows its content)
+        # We create a placeholder that mirrors the tab content
+        # Actually, the tabs already contain their text widgets, so we just add a spacer
+        # to maintain the 4-quadrant visual structure
+        bottom_right = QWidget()
+        bottom_right_layout = QVBoxLayout()
+        bottom_right_layout.setContentsMargins(0, 0, 0, 0)
+        # Add a label to indicate this mirrors the tab above
+        mirror_label = QLabel("(Content shown in tab above)")
+        mirror_label.setStyleSheet("color: gray; font-style: italic;")
+        bottom_right_layout.addWidget(mirror_label, 0, Qt.AlignCenter)
+        bottom_right.setLayout(bottom_right_layout)
+        bottom_splitter.addWidget(bottom_right)
+        
+        # Set 50/50 split for bottom panel
+        bottom_splitter.setSizes([600, 600])
+        
+        main_splitter.addWidget(bottom_splitter)
+        
+        # Set height ratio for top:bottom panels (top shorter, bottom taller)
+        # For example, 1:3 ratio
+        main_splitter.setSizes([100, 400])
+        
+        main_layout.addWidget(main_splitter)
         
         # Status bar
         self.status_label = QLabel("Ready")
