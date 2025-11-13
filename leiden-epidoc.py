@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
-    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter, QInputDialog
+    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter, QInputDialog,
+    QTabBar, QStackedWidget
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -609,31 +610,21 @@ class LeidenEpiDocGUI(QMainWindow):
         top_left.setLayout(top_left_layout)
         top_layout.addWidget(top_left)
         
-        # Top-right: Tabs (just the tab bar, content will be in bottom-right)
-        self.tabs = QTabWidget()
+        # Top-right: Just the tab bar (separated from content)
+        top_right = QWidget()
+        top_right_layout = QVBoxLayout()
+        top_right_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Notes tab
-        self.notes_text = QTextEdit()
-        self.notes_text.setReadOnly(True)
-        self.notes_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.notes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.notes_text, "Notes")
+        self.tab_bar = QTabBar()
+        self.tab_bar.addTab("Notes")
+        self.tab_bar.addTab("Analysis")
+        self.tab_bar.addTab("Full Results")
+        self.tab_bar.currentChanged.connect(self.on_tab_changed)
+        top_right_layout.addWidget(self.tab_bar)
         
-        # Analysis tab
-        self.analysis_text = QTextEdit()
-        self.analysis_text.setReadOnly(True)
-        self.analysis_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.analysis_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.analysis_text, "Analysis")
+        top_right.setLayout(top_right_layout)
+        top_layout.addWidget(top_right)
         
-        # Full Results tab
-        self.full_results_text = QTextEdit()
-        self.full_results_text.setReadOnly(True)
-        self.full_results_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.full_results_text, "Full Results")
-        
-        top_layout.addWidget(self.tabs)
         top_panel.setLayout(top_layout)
         main_splitter.addWidget(top_panel)
         
@@ -647,19 +638,31 @@ class LeidenEpiDocGUI(QMainWindow):
         self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         bottom_splitter.addWidget(self.translation_text)
         
-        # Bottom-right: Currently selected tab content (the tabs widget already shows its content)
-        # We create a placeholder that mirrors the tab content
-        # Actually, the tabs already contain their text widgets, so we just add a spacer
-        # to maintain the 4-quadrant visual structure
-        bottom_right = QWidget()
-        bottom_right_layout = QVBoxLayout()
-        bottom_right_layout.setContentsMargins(0, 0, 0, 0)
-        # Add a label to indicate this mirrors the tab above
-        mirror_label = QLabel("(Content shown in tab above)")
-        mirror_label.setStyleSheet("color: gray; font-style: italic;")
-        bottom_right_layout.addWidget(mirror_label, 0, Qt.AlignCenter)
-        bottom_right.setLayout(bottom_right_layout)
-        bottom_splitter.addWidget(bottom_right)
+        # Bottom-right: Stacked widget to show selected tab content
+        self.tab_content_stack = QStackedWidget()
+        
+        # Notes tab content
+        self.notes_text = QTextEdit()
+        self.notes_text.setReadOnly(True)
+        self.notes_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.notes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tab_content_stack.addWidget(self.notes_text)
+        
+        # Analysis tab content
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setReadOnly(True)
+        self.analysis_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.analysis_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tab_content_stack.addWidget(self.analysis_text)
+        
+        # Full Results tab content
+        self.full_results_text = QTextEdit()
+        self.full_results_text.setReadOnly(True)
+        self.full_results_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tab_content_stack.addWidget(self.full_results_text)
+        
+        bottom_splitter.addWidget(self.tab_content_stack)
         
         # Set 50/50 split for bottom panel
         bottom_splitter.setSizes([600, 600])
@@ -719,6 +722,10 @@ class LeidenEpiDocGUI(QMainWindow):
         edit_examples_action = QAction("Edit Examples", self)
         edit_examples_action.triggered.connect(self.show_examples_editor)
         settings_menu.addAction(edit_examples_action)
+
+    def on_tab_changed(self, index):
+        """Handle tab bar selection change to update the stacked widget"""
+        self.tab_content_stack.setCurrentIndex(index)
 
     def toggle_word_wrap(self):
         enabled = self.word_wrap_action.isChecked()
