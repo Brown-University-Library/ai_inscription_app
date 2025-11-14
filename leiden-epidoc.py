@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
-    QTabBar, QStackedWidget
+    QTabBar, QStackedWidget, QRadioButton, QButtonGroup
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -535,6 +535,99 @@ class ExamplesEditorDialog(QDialog):
         self.accept()
 
 
+class SaveContentDialog(QDialog):
+    """Dialog for saving Notes, Analysis, or Full Output with radio button selection"""
+    
+    def __init__(self, parent, converter, last_result, current_tab_index):
+        super().__init__(parent)
+        self.converter = converter
+        self.last_result = last_result
+        self.current_tab_index = current_tab_index
+        self.setWindowTitle("Save to File")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+        
+        layout = QVBoxLayout()
+        
+        # Info label
+        info_label = QLabel("Select content to save:")
+        layout.addWidget(info_label)
+        
+        # Radio buttons for content selection
+        self.button_group = QButtonGroup(self)
+        
+        self.notes_radio = QRadioButton("Notes")
+        self.analysis_radio = QRadioButton("Analysis")
+        self.full_output_radio = QRadioButton("Full Output")
+        
+        self.button_group.addButton(self.notes_radio, 0)
+        self.button_group.addButton(self.analysis_radio, 1)
+        self.button_group.addButton(self.full_output_radio, 2)
+        
+        layout.addWidget(self.notes_radio)
+        layout.addWidget(self.analysis_radio)
+        layout.addWidget(self.full_output_radio)
+        
+        # Default to the currently displayed tab
+        if current_tab_index == 0:
+            self.notes_radio.setChecked(True)
+        elif current_tab_index == 1:
+            self.analysis_radio.setChecked(True)
+        else:
+            self.full_output_radio.setChecked(True)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self.save_content)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+    
+    def save_content(self):
+        """Save the selected content to a file"""
+        # Determine which content to save
+        selected_id = self.button_group.checkedId()
+        
+        if selected_id == 0:  # Notes
+            content = self.last_result.get("notes", "")
+            default_name = "epidoc_notes.txt"
+            content_type = "notes"
+        elif selected_id == 1:  # Analysis
+            content = self.last_result.get("analysis", "")
+            default_name = "epidoc_analysis.txt"
+            content_type = "analysis"
+        else:  # Full Output
+            content = self.last_result.get("full_text", "")
+            default_name = "epidoc_full_output.txt"
+            content_type = "full output"
+        
+        if not content.strip():
+            QMessageBox.warning(self, "No Content", 
+                              f"No {content_type} to save. Please convert text first.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, f"Save {content_type.title()}", 
+            os.path.join(self.converter.save_location, default_name),
+            "Text Files (*.txt);;XML Files (*.xml);;All Files (*)")
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                QMessageBox.information(self, "Success", 
+                                      f"Saved {content_type} to: {file_path}")
+                self.accept()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
+
+
 class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
     
@@ -610,10 +703,15 @@ class LeidenEpiDocGUI(QMainWindow):
         top_left.setLayout(top_left_layout)
         top_layout.addWidget(top_left)
         
-        # Top-right: Just the tab bar (separated from content)
+        # Top-right: Save button and tab bar (separated from content)
         top_right = QWidget()
         top_right_layout = QVBoxLayout()
         top_right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Add save button
+        save_content_btn = QPushButton("Save to File")
+        save_content_btn.clicked.connect(self.save_content_dialog)
+        top_right_layout.addWidget(save_content_btn)
 
         # Add stretch to push tab bar to bottom
         top_right_layout.addStretch()
@@ -804,6 +902,20 @@ class LeidenEpiDocGUI(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
                 self.status_label.setText(f"Error saving file: {str(e)}")
+    
+    def save_content_dialog(self):
+        """Show the save content dialog with radio button selection"""
+        if not self.last_result:
+            QMessageBox.warning(self, "No Content", 
+                              "No content to save. Please convert text first.")
+            return
+        
+        # Get the current tab index
+        current_tab = self.tab_bar.currentIndex()
+        
+        # Show the dialog
+        dialog = SaveContentDialog(self, self.converter, self.last_result, current_tab)
+        dialog.exec()
     
     def _clear_output_widgets(self):
         """Clear all output text widgets"""
