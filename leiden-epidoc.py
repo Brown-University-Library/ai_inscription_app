@@ -614,8 +614,12 @@ class LeidenEpiDocGUI(QMainWindow):
         top_right = QWidget()
         top_right_layout = QVBoxLayout()
         top_right_layout.setContentsMargins(0, 0, 0, 0)
-        
+
+        # Add stretch to push tab bar to bottom
+        top_right_layout.addStretch()
+
         self.tab_bar = QTabBar()
+        self.tab_bar.setDrawBase(False)
         self.tab_bar.addTab("Notes")
         self.tab_bar.addTab("Analysis")
         self.tab_bar.addTab("Full Results")
@@ -624,7 +628,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         top_right.setLayout(top_right_layout)
         top_layout.addWidget(top_right)
-        
+
         top_panel.setLayout(top_layout)
         main_splitter.addWidget(top_panel)
         
