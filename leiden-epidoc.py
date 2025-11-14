@@ -670,7 +670,7 @@ class LeidenEpiDocGUI(QMainWindow):
         main_splitter.addWidget(bottom_splitter)
         
         # Set height ratio for top:bottom panels (top shorter, bottom taller)
-        # For example, 1:3 ratio
+        # Set 1:4 ratio (top:bottom)
         main_splitter.setSizes([100, 400])
         
         main_layout.addWidget(main_splitter)
