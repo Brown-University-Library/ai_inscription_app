@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
-    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter, QInputDialog
+    QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
+    QTabBar, QStackedWidget
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -582,70 +583,97 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_text)
         main_layout.addWidget(self.convert_btn)
         
-        # Output section with splitter
+        # Output section with 4-quadrant layout
         output_label = QLabel("Output (EpiDoc XML):")
         main_layout.addWidget(output_label)
         
-        # Create a horizontal splitter for the two panes
-        splitter = QSplitter(Qt.Horizontal)
+        # Create a vertical splitter for top and bottom panels
+        main_splitter = QSplitter(Qt.Vertical)
         
-        # Left pane: Final Translation
-        left_pane = QWidget()
-        left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # TOP PANEL (short) - split into left and right
+        top_panel = QWidget()
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Top-left: Label and button
+        top_left = QWidget()
+        top_left_layout = QVBoxLayout()
+        top_left_layout.setContentsMargins(0, 0, 0, 0)
         
         translation_label = QLabel("Final Translation:")
-        left_layout.addWidget(translation_label)
+        top_left_layout.addWidget(translation_label)
         
         save_translation_btn = QPushButton("Save Translation to File")
         save_translation_btn.clicked.connect(self.save_translation)
-        left_layout.addWidget(save_translation_btn)
+        top_left_layout.addWidget(save_translation_btn)
         
+        top_left.setLayout(top_left_layout)
+        top_layout.addWidget(top_left)
+        
+        # Top-right: Just the tab bar (separated from content)
+        top_right = QWidget()
+        top_right_layout = QVBoxLayout()
+        top_right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.tab_bar = QTabBar()
+        self.tab_bar.addTab("Notes")
+        self.tab_bar.addTab("Analysis")
+        self.tab_bar.addTab("Full Results")
+        self.tab_bar.currentChanged.connect(self.on_tab_changed)
+        top_right_layout.addWidget(self.tab_bar)
+        
+        top_right.setLayout(top_right_layout)
+        top_layout.addWidget(top_right)
+        
+        top_panel.setLayout(top_layout)
+        main_splitter.addWidget(top_panel)
+        
+        # BOTTOM PANEL (tall) - split into left and right
+        bottom_splitter = QSplitter(Qt.Horizontal)
+        
+        # Bottom-left: Translation text area
         self.translation_text = QTextEdit()
         self.translation_text.setReadOnly(True)
         self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
         self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        left_layout.addWidget(self.translation_text)
+        bottom_splitter.addWidget(self.translation_text)
         
-        left_pane.setLayout(left_layout)
-        splitter.addWidget(left_pane)
+        # Bottom-right: Stacked widget to show selected tab content
+        self.tab_content_stack = QStackedWidget()
         
-        # Right pane: Tabs for Notes, Analysis, Full Results
-        right_pane = QWidget()
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.tabs = QTabWidget()
-        
-        # Notes tab
+        # Notes tab content
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
         self.notes_text.setLineWrapMode(QTextEdit.WidgetWidth)
         self.notes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.notes_text, "Notes")
+        self.tab_content_stack.addWidget(self.notes_text)
         
-        # Analysis tab
+        # Analysis tab content
         self.analysis_text = QTextEdit()
         self.analysis_text.setReadOnly(True)
         self.analysis_text.setLineWrapMode(QTextEdit.WidgetWidth)
         self.analysis_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.analysis_text, "Analysis")
+        self.tab_content_stack.addWidget(self.analysis_text)
         
-        # Full Results tab
+        # Full Results tab content
         self.full_results_text = QTextEdit()
         self.full_results_text.setReadOnly(True)
         self.full_results_text.setLineWrapMode(QTextEdit.WidgetWidth)
         self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tabs.addTab(self.full_results_text, "Full Results")
+        self.tab_content_stack.addWidget(self.full_results_text)
         
-        right_layout.addWidget(self.tabs)
-        right_pane.setLayout(right_layout)
-        splitter.addWidget(right_pane)
+        bottom_splitter.addWidget(self.tab_content_stack)
         
-        # Set initial sizes for splitter (50/50 split)
-        splitter.setSizes([600, 600])
+        # Set 50/50 split for bottom panel
+        bottom_splitter.setSizes([600, 600])
         
-        main_layout.addWidget(splitter)
+        main_splitter.addWidget(bottom_splitter)
+        
+        # Set height ratio for top:bottom panels (top shorter, bottom taller)
+        # Set 1:4 ratio (top:bottom)
+        main_splitter.setSizes([100, 400])
+        
+        main_layout.addWidget(main_splitter)
         
         # Status bar
         self.status_label = QLabel("Ready")
@@ -694,6 +722,10 @@ class LeidenEpiDocGUI(QMainWindow):
         edit_examples_action = QAction("Edit Examples", self)
         edit_examples_action.triggered.connect(self.show_examples_editor)
         settings_menu.addAction(edit_examples_action)
+
+    def on_tab_changed(self, index):
+        """Handle tab bar selection change to update the stacked widget"""
+        self.tab_content_stack.setCurrentIndex(index)
 
     def toggle_word_wrap(self):
         enabled = self.word_wrap_action.isChecked()
