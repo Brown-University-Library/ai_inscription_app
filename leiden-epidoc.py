@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
-    QDialog, QLineEdit, QFormLayout, QMessageBox, QTabWidget, QSplitter, QInputDialog,
+    QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabBar, QStackedWidget
 )
 from PySide6.QtCore import QThread, Signal, Qt
