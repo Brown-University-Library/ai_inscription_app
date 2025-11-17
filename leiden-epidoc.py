@@ -598,14 +598,17 @@ class SaveContentDialog(QDialog):
             content = self.last_result.get("notes", "")
             default_name = "epidoc_notes.txt"
             content_type = "notes"
+            display_name = "Notes"
         elif selected_id == 1:  # Analysis
             content = self.last_result.get("analysis", "")
             default_name = "epidoc_analysis.txt"
             content_type = "analysis"
+            display_name = "Analysis"
         else:  # Full Output
             content = self.last_result.get("full_text", "")
             default_name = "epidoc_full_output.txt"
             content_type = "full output"
+            display_name = "Full Output"
         
         if not content.strip():
             QMessageBox.warning(self, "No Content", 
@@ -613,7 +616,7 @@ class SaveContentDialog(QDialog):
             return
         
         file_path, _ = QFileDialog.getSaveFileName(
-            self, f"Save {content_type.title()}", 
+            self, f"Save {display_name}", 
             os.path.join(self.converter.save_location, default_name),
             "Text Files (*.txt);;XML Files (*.xml);;All Files (*)")
         
