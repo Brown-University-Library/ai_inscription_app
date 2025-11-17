@@ -62,7 +62,7 @@ class LeidenToEpiDocConverter:
             try:
                 with open(CONFIG_FILE, 'r') as f:
                     return json.load(f)
-            except:
+            except (OSError, json.JSONDecodeError):
                 return {}
         return {}
     
