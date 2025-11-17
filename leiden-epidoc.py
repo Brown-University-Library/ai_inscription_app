@@ -623,9 +623,15 @@ class SaveContentDialog(QDialog):
                     f.write(content)
                 QMessageBox.information(self, "Success", 
                                       f"Saved {content_type} to: {file_path}")
+                # Update parent's status label
+                if hasattr(self.parent(), 'status_label'):
+                    self.parent().status_label.setText(f"Saved {content_type} to: {file_path}")
                 self.accept()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
+                # Update parent's status label on error
+                if hasattr(self.parent(), 'status_label'):
+                    self.parent().status_label.setText(f"Error saving file: {str(e)}")
 
 
 class LeidenEpiDocGUI(QMainWindow):
