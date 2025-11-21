@@ -16,13 +16,24 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
-    QTabWidget, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem
+    QTabWidget, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem,
+    QSplitterHandle
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QFont, QCursor
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
+
+
+class CustomSplitter(QSplitter):
+    """Custom QSplitter with enhanced handle visibility and cursor feedback"""
+    
+    def createHandle(self):
+        """Override to create a custom handle with open hand cursor"""
+        handle = QSplitter.createHandle(self)
+        handle.setCursor(QCursor(Qt.OpenHandCursor))
+        return handle
 
 
 class FileItem:
@@ -593,7 +604,12 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout = QVBoxLayout()
         
         # Main horizontal splitter: left pane (file list) and right pane (content viewer)
-        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter = CustomSplitter(Qt.Horizontal)
+        # Make the splitter handle more obvious
+        main_splitter.setHandleWidth(10)  # Increase from default ~4px to 10px
+        # Add visual styling to make the handle more visible
+        main_splitter.setStyleSheet("QSplitter::handle { background-color: #d0d0d0; }"
+                                   "QSplitter::handle:hover { background-color: #a0a0a0; }")
         
         # LEFT PANE: File list with checkboxes
         left_pane = QWidget()
