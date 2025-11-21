@@ -608,8 +608,10 @@ class LeidenEpiDocGUI(QMainWindow):
         # Make the splitter handle more obvious
         main_splitter.setHandleWidth(10)  # Increase from default ~4px to 10px
         # Add visual styling to make the handle more visible
-        main_splitter.setStyleSheet("QSplitter::handle { background-color: #d0d0d0; }"
-                                   "QSplitter::handle:hover { background-color: #a0a0a0; }")
+        main_splitter.setStyleSheet(
+            "QSplitter::handle { background-color: #d0d0d0; }"
+            "QSplitter::handle:hover { background-color: #a0a0a0; }"
+        )
         
         # LEFT PANE: File list with checkboxes
         left_pane = QWidget()
