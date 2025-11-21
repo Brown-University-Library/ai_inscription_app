@@ -686,6 +686,8 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Status bar
         self.status_label = QLabel("Ready - Load files to begin")
+        self.status_label.setMaximumHeight(25)
+        self.status_label.setStyleSheet("padding: 5px;")
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
