@@ -16,8 +16,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
-    QTabWidget, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem,
-    QCheckBox
+    QTabWidget, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -569,10 +568,9 @@ class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
     
     # Constants for UI messages
-    CONVERTING_MESSAGE = "Converting... Please wait."
     MISSING_TAGS_WARNING = ("Warning: The response from the AI did not include the expected "
                            "tags (<analysis>, <notes>, <final_translation>). "
-                           "Displaying the full unseparated response in the Full Results tab.")
+                           "Displaying the full unseparated response in the Full Output tab.")
     
     def __init__(self):
         super().__init__()
