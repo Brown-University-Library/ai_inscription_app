@@ -954,9 +954,10 @@ class LeidenEpiDocGUI(QMainWindow):
         """Get the content, default filename, and extension based on tab index"""
         result = file_item.conversion_result
         base_name = os.path.splitext(file_item.file_name)[0]
+        original_ext = os.path.splitext(file_item.file_name)[1] or ".txt"
         
         if tab_index == 0:  # Input
-            return (file_item.input_text, f"{file_item.file_name}", ".txt")
+            return (file_item.input_text, file_item.file_name, original_ext)
         elif tab_index == 1:  # EpiDoc
             return (result.get("final_translation", ""), f"{base_name}_epidoc.xml", ".xml")
         elif tab_index == 2:  # Notes
@@ -1006,6 +1007,7 @@ class LeidenEpiDocGUI(QMainWindow):
         saved_count = 0
         error_count = 0
         skipped_count = 0
+        used_names = set()  # Track used names to avoid collisions
         
         for file_item in file_items:
             content, default_name, _ = self._get_output_info_for_tab(file_item, tab_index)
@@ -1014,14 +1016,24 @@ class LeidenEpiDocGUI(QMainWindow):
                 skipped_count += 1
                 continue
             
-            file_path = os.path.join(directory, default_name)
+            # Handle file name collisions
+            final_name = default_name
+            if default_name in used_names:
+                base, ext = os.path.splitext(default_name)
+                counter = 1
+                while final_name in used_names:
+                    final_name = f"{base}_{counter}{ext}"
+                    counter += 1
+            
+            used_names.add(final_name)
+            file_path = os.path.join(directory, final_name)
             
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(content)
                 saved_count += 1
             except Exception as e:
-                logger.error(f"Error saving {default_name}: {str(e)}")
+                logger.error(f"Error saving {final_name}: {str(e)}")
                 error_count += 1
         
         # Show summary
