@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QFont, QCursor
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -714,6 +714,13 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Set 40/60 split (left/right)
         main_splitter.setSizes([480, 720])  # 40% : 60%
+        
+        # Make the splitter handle more obvious for easier resizing
+        main_splitter.setHandleWidth(6)  # Slightly wider than default (~4px)
+        # Set horizontal split cursor on the handle to indicate it's draggable
+        handle = main_splitter.handle(1)
+        if handle:
+            handle.setCursor(QCursor(Qt.SplitHCursor))
         
         main_layout.addWidget(main_splitter)
         
