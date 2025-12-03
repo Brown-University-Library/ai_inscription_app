@@ -793,6 +793,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         if file_paths:
             loaded_count = 0
+            failed_files = []
             for file_path in file_paths:
                 if file_path not in self.file_items:
                     file_item = FileItem(file_path)
@@ -801,8 +802,11 @@ class LeidenEpiDocGUI(QMainWindow):
                         self._add_file_to_table(file_item)
                         loaded_count += 1
                     else:
-                        QMessageBox.warning(self, "Load Error", 
-                                          f"Failed to load file: {file_item.file_name}")
+                        failed_files.append(file_item.file_name)
+            
+            if failed_files:
+                QMessageBox.warning(self, "Load Errors", 
+                                   f"Failed to load {len(failed_files)} file(s):\n" + "\n".join(failed_files))
             
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
