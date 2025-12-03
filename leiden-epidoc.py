@@ -1011,6 +1011,9 @@ class LeidenEpiDocGUI(QMainWindow):
             file_item = self.file_items[file_path]
             file_item.conversion_result = result
             file_item.is_converted = True
+        else:
+            logger.warning(f"Conversion completed for unknown file: {file_path}")
+            return
         
         # Update the table UI
         for row in range(self.file_table.rowCount()):
