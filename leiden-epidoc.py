@@ -1103,7 +1103,7 @@ class LeidenEpiDocGUI(QMainWindow):
             return (result.get("notes", ""), f"{base_name}_notes.txt", ".txt")
         elif tab_index == self.TAB_ANALYSIS:
             return (result.get("analysis", ""), f"{base_name}_analysis.txt", ".txt")
-        else:  # TAB_FULL_OUTPUT
+        else:  # self.TAB_FULL_OUTPUT
             return (result.get("full_text", ""), f"{base_name}_full.txt", ".txt")
     
     def _save_single_file(self, file_item, tab_index):
