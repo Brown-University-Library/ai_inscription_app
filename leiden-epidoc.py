@@ -886,8 +886,25 @@ class LeidenEpiDocGUI(QMainWindow):
             if file_path in self.file_items:
                 self.current_file_item = self.file_items[file_path]
                 self._display_file_content(self.current_file_item)
-                self.save_btn.setEnabled(True)
+                self._update_save_button_state()
     
+    def _update_save_button_state(self):
+        """Enable save button only if current file or any checked file is converted"""
+        enable = False
+        # Check if current file is converted
+        if hasattr(self, "current_file_item") and self.current_file_item and getattr(self.current_file_item, "is_converted", False):
+            enable = True
+        else:
+            # Check if any checked file is converted
+            for row in range(self.file_table.rowCount()):
+                filename_item = self.file_table.item(row, 0)
+                if filename_item and filename_item.checkState() == Qt.Checked:
+                    file_path = filename_item.data(Qt.UserRole)
+                    file_item = self.file_items.get(file_path)
+                    if file_item and getattr(file_item, "is_converted", False):
+                        enable = True
+                        break
+        self.save_btn.setEnabled(enable)
     def _display_file_content(self, file_item):
         """Display the content of the selected file in the right pane"""
         # Always show input text
