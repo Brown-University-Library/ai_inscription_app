@@ -1097,8 +1097,11 @@ class LeidenEpiDocGUI(QMainWindow):
             if self.current_file_item and self.current_file_item.is_converted:
                 checked_files = [self.current_file_item]
             else:
-                QMessageBox.warning(self, "No Output", 
-                                  "No converted files selected. Please check the files you want to save.")
+                QMessageBox.warning(
+                    self,
+                    "No Output",
+                    "No converted files to save. Please convert and check files first, or select a converted file."
+                )
                 return
         
         # Warn if some checked files are not converted
