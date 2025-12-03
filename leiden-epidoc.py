@@ -62,18 +62,20 @@ class ConversionThread(QThread):
     
     def run(self):
         total = len(self.file_items)
+        errors = []
         for idx, file_item in enumerate(self.file_items, 1):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
-            # Emit result with file path instead of modifying the object directly
-            # This avoids race conditions between the conversion thread and GUI thread
-            self.file_completed.emit(file_item.file_path, result)
+            file_item.conversion_result = result
+            file_item.is_converted = True
+            if result.get("error"):
+                errors.append((file_item.file_name, result["error"]))
+            self.file_completed.emit(file_item.file_path)
         
         # Emit finished signal with summary
-        self.finished.emit({"success": True, "converted_count": total})
-
-
+        success = len(errors) == 0
+        self.finished.emit({"success": success, "converted_count": total, "errors": errors})
 class LeidenToEpiDocConverter:
     # Pre-compiled regex patterns for better performance
     ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
@@ -793,6 +795,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         if file_paths:
             loaded_count = 0
+            failed_files = []
             for file_path in file_paths:
                 if file_path not in self.file_items:
                     file_item = FileItem(file_path)
@@ -801,8 +804,18 @@ class LeidenEpiDocGUI(QMainWindow):
                         self._add_file_to_table(file_item)
                         loaded_count += 1
                     else:
-                        QMessageBox.warning(self, "Load Error", 
-                                          f"Failed to load file: {file_item.file_name}")
+                        failed_files.append(file_item.file_name)
+            
+            if failed_files:
+                max_display = 10
+                if len(failed_files) > max_display:
+                    displayed_files = "\n".join(failed_files[:max_display])
+                    remaining = len(failed_files) - max_display
+                    file_list = f"{displayed_files}\n...and {remaining} more file(s)"
+                else:
+                    file_list = "\n".join(failed_files)
+                QMessageBox.warning(self, "Load Errors", 
+                                   f"Failed to load {len(failed_files)} file(s):\n{file_list}")
             
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
@@ -1048,7 +1061,11 @@ class LeidenEpiDocGUI(QMainWindow):
         self._update_selection_button_states()
     
     def save_output(self):
-        """Save the output for all checked files based on the currently selected tab"""
+        """Save the output for all checked files based on the currently selected tab.
+        
+        If no files are checked, falls back to saving the currently selected file if it is converted.
+        The content saved depends on which tab is currently active (Input, EpiDoc, Notes, Analysis, or Full Output).
+        """
         # Get all checked files
         checked_files = []
         unconverted_files = []
