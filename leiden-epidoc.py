@@ -851,17 +851,27 @@ class LeidenEpiDocGUI(QMainWindow):
     def convert_selected(self):
         """Convert all selected files"""
         selected_items = []
+        selected_file_paths = []
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.checkState() == Qt.Checked:
                 file_path = filename_item.data(Qt.UserRole)
                 if file_path in self.file_items:
                     selected_items.append(self.file_items[file_path])
+                    selected_file_paths.append(file_path)
         
         if not selected_items:
             QMessageBox.warning(self, "No Selection", 
                               "Please select at least one file to convert.")
             return
+        
+        # Set all selected files to "Queued" status
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) in selected_file_paths:
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    converted_item.setText("Queued")
         
         # Show status about custom prompts
         custom_status = []
