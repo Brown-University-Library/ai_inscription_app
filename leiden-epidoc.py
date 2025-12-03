@@ -932,8 +932,8 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.full_output_text.setPlainText(result.get("full_text", ""))
                 # Only show warning once per file
                 if not result.get("error") and file_item.file_path not in self.missing_tags_warned:
-                    self.missing_tags_warned.add(file_item.file_path)
                     QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
+                    self.missing_tags_warned.add(file_item.file_path)
         else:
             # Not yet converted
             self.epidoc_text.setPlainText("")
