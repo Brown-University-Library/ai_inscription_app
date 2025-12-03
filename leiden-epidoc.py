@@ -1031,7 +1031,11 @@ class LeidenEpiDocGUI(QMainWindow):
         self._update_selection_button_states()
     
     def save_output(self):
-        """Save the output for all checked files based on the currently selected tab"""
+        """Save the output for all checked files based on the currently selected tab.
+        
+        If no files are checked, falls back to saving the currently selected file if it is converted.
+        The content saved depends on which tab is currently active (Input, EpiDoc, Notes, Analysis, or Full Output).
+        """
         # Get all checked files
         checked_files = []
         unconverted_files = []
