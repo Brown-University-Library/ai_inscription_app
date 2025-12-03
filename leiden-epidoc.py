@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
-    QTabWidget, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem
+    QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QAction, QFont, QColor
+from PySide6.QtGui import QAction, QFont
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -51,6 +52,8 @@ class ConversionThread(QThread):
     
     finished = Signal(dict)
     progress = Signal(int, int)  # current, total
+    file_started = Signal(str)  # file_path - emitted when file starts converting
+    file_completed = Signal(str)  # file_path - emitted when file finishes converting
     
     def __init__(self, converter, file_items):
         super().__init__()
@@ -60,10 +63,12 @@ class ConversionThread(QThread):
     def run(self):
         total = len(self.file_items)
         for idx, file_item in enumerate(self.file_items, 1):
+            self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
             file_item.conversion_result = result
             file_item.is_converted = True
+            self.file_completed.emit(file_item.file_path)
         
         # Emit finished signal with summary
         self.finished.emit({"success": True, "converted_count": total})
@@ -595,7 +600,7 @@ class LeidenEpiDocGUI(QMainWindow):
         # Main horizontal splitter: left pane (file list) and right pane (content viewer)
         main_splitter = QSplitter(Qt.Horizontal)
         
-        # LEFT PANE: File list with checkboxes
+        # LEFT PANE: File table with checkboxes and status
         left_pane = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -605,13 +610,19 @@ class LeidenEpiDocGUI(QMainWindow):
         load_files_btn.clicked.connect(self.load_files)
         left_layout.addWidget(load_files_btn)
         
-        # File list
+        # File table
         files_label = QLabel("Loaded Files:")
         left_layout.addWidget(files_label)
         
-        self.file_list = QListWidget()
-        self.file_list.itemClicked.connect(self.on_file_selected)
-        left_layout.addWidget(self.file_list)
+        self.file_table = QTableWidget()
+        self.file_table.setColumnCount(2)
+        self.file_table.setHorizontalHeaderLabels(["Filename", "Converted"])
+        self.file_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.file_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.file_table.cellClicked.connect(self.on_file_selected)
+        left_layout.addWidget(self.file_table)
         
         # Convert selected button
         self.convert_btn = QPushButton("Convert Selected to EpiDoc")
@@ -765,7 +776,7 @@ class LeidenEpiDocGUI(QMainWindow):
                     file_item = FileItem(file_path)
                     if file_item.load_content():
                         self.file_items[file_path] = file_item
-                        self._add_file_to_list(file_item)
+                        self._add_file_to_table(file_item)
                         loaded_count += 1
                     else:
                         QMessageBox.warning(self, "Load Error", 
@@ -777,21 +788,32 @@ class LeidenEpiDocGUI(QMainWindow):
             else:
                 self.status_label.setText("No new files loaded")
     
-    def _add_file_to_list(self, file_item):
-        """Add a file item to the list widget with a checkbox"""
-        item = QListWidgetItem(self.file_list)
-        item.setText(file_item.file_name)
-        item.setCheckState(Qt.Checked)  # Default to checked
-        item.setData(Qt.UserRole, file_item.file_path)  # Store file path as data
-        self.file_list.addItem(item)
+    def _add_file_to_table(self, file_item):
+        """Add a file item to the table with a checkbox"""
+        row = self.file_table.rowCount()
+        self.file_table.insertRow(row)
+        
+        # Filename column with checkbox
+        filename_item = QTableWidgetItem(file_item.file_name)
+        filename_item.setCheckState(Qt.Checked)  # Default to checked
+        filename_item.setData(Qt.UserRole, file_item.file_path)  # Store file path as data
+        self.file_table.setItem(row, 0, filename_item)
+        
+        # Converted column - initially empty
+        converted_item = QTableWidgetItem("")
+        converted_item.setTextAlignment(Qt.AlignCenter)
+        converted_item.setFlags(converted_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
+        self.file_table.setItem(row, 1, converted_item)
     
-    def on_file_selected(self, item):
-        """Handle file selection from the list"""
-        file_path = item.data(Qt.UserRole)
-        if file_path in self.file_items:
-            self.current_file_item = self.file_items[file_path]
-            self._display_file_content(self.current_file_item)
-            self.save_btn.setEnabled(True)
+    def on_file_selected(self, row, column):
+        """Handle file selection from the table"""
+        filename_item = self.file_table.item(row, 0)
+        if filename_item:
+            file_path = filename_item.data(Qt.UserRole)
+            if file_path in self.file_items:
+                self.current_file_item = self.file_items[file_path]
+                self._display_file_content(self.current_file_item)
+                self.save_btn.setEnabled(True)
     
     def _display_file_content(self, file_item):
         """Display the content of the selected file in the right pane"""
@@ -829,10 +851,10 @@ class LeidenEpiDocGUI(QMainWindow):
     def convert_selected(self):
         """Convert all selected files"""
         selected_items = []
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            if item.checkState() == Qt.Checked:
-                file_path = item.data(Qt.UserRole)
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.checkState() == Qt.Checked:
+                file_path = filename_item.data(Qt.UserRole)
                 if file_path in self.file_items:
                     selected_items.append(self.file_items[file_path])
         
@@ -859,12 +881,37 @@ class LeidenEpiDocGUI(QMainWindow):
         # Run conversion in separate thread
         self.conversion_thread = ConversionThread(self.converter, selected_items)
         self.conversion_thread.progress.connect(self.conversion_progress)
+        self.conversion_thread.file_started.connect(self.on_file_conversion_started)
+        self.conversion_thread.file_completed.connect(self.on_file_conversion_completed)
         self.conversion_thread.finished.connect(self.conversion_finished)
         self.conversion_thread.start()
     
     def conversion_progress(self, current, total):
         """Handle conversion progress updates"""
         self.status_label.setText(f"Converting file {current} of {total}...")
+    
+    def on_file_conversion_started(self, file_path):
+        """Update table to show 'In Progress' for the file being converted"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) == file_path:
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    converted_item.setText("In Progress")
+                break
+    
+    def on_file_conversion_completed(self, file_path):
+        """Update table to show checkmark for converted file and uncheck it"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) == file_path:
+                # Update converted column to show checkmark
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    converted_item.setText("✓")
+                # Uncheck the file
+                filename_item.setCheckState(Qt.Unchecked)
+                break
     
     def conversion_finished(self, result):
         """Handle batch conversion completion"""
@@ -874,39 +921,21 @@ class LeidenEpiDocGUI(QMainWindow):
             count = result.get("converted_count", 0)
             self.status_label.setText(f"Successfully converted {count} file(s)")
             
-            # Update file list UI - uncheck converted files and add visual indicator
-            self._update_file_list_after_conversion()
-            
             # Refresh the display if a file is currently selected
             if self.current_file_item:
                 self._display_file_content(self.current_file_item)
         else:
             self.status_label.setText("Conversion failed")
     
-    def _update_file_list_after_conversion(self):
-        """Update file list items after conversion - uncheck and add visual indicator"""
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            file_path = item.data(Qt.UserRole)
-            if file_path in self.file_items:
-                file_item = self.file_items[file_path]
-                if file_item.is_converted:
-                    # Uncheck the converted file
-                    item.setCheckState(Qt.Unchecked)
-                    # Add visual indicator - green checkmark prefix and light green background
-                    if not item.text().startswith("✓ "):
-                        item.setText(f"✓ {file_item.file_name}")
-                    item.setBackground(QColor(200, 255, 200))  # Light green background
-    
     def save_output(self):
         """Save the output for all checked files based on the currently selected tab"""
         # Get all checked files
         checked_files = []
         unconverted_files = []
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            if item.checkState() == Qt.Checked:
-                file_path = item.data(Qt.UserRole)
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.checkState() == Qt.Checked:
+                file_path = filename_item.data(Qt.UserRole)
                 if file_path in self.file_items:
                     file_item = self.file_items[file_path]
                     if file_item.is_converted:
