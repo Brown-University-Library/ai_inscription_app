@@ -53,7 +53,7 @@ class ConversionThread(QThread):
     finished = Signal(dict)
     progress = Signal(int, int)  # current, total
     file_started = Signal(str)  # file_path - emitted when file starts converting
-    file_completed = Signal(str)  # file_path - emitted when file finishes converting
+    file_completed = Signal(str, dict)  # file_path, result - emitted when file finishes converting
     
     def __init__(self, converter, file_items):
         super().__init__()
@@ -62,18 +62,20 @@ class ConversionThread(QThread):
     
     def run(self):
         total = len(self.file_items)
+        errors = []
         for idx, file_item in enumerate(self.file_items, 1):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
             file_item.conversion_result = result
             file_item.is_converted = True
+            if result.get("error"):
+                errors.append((file_item.file_name, result["error"]))
             self.file_completed.emit(file_item.file_path)
         
         # Emit finished signal with summary
-        self.finished.emit({"success": True, "converted_count": total})
-
-
+        success = len(errors) == 0
+        self.finished.emit({"success": success, "converted_count": total, "errors": errors})
 class LeidenToEpiDocConverter:
     # Pre-compiled regex patterns for better performance
     ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
@@ -800,6 +802,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         if file_paths:
             loaded_count = 0
+            failed_files = []
             for file_path in file_paths:
                 if file_path not in self.file_items:
                     file_item = FileItem(file_path)
@@ -808,8 +811,18 @@ class LeidenEpiDocGUI(QMainWindow):
                         self._add_file_to_table(file_item)
                         loaded_count += 1
                     else:
-                        QMessageBox.warning(self, "Load Error", 
-                                          f"Failed to load file: {file_item.file_name}")
+                        failed_files.append(file_item.file_name)
+            
+            if failed_files:
+                max_display = 10
+                if len(failed_files) > max_display:
+                    displayed_files = "\n".join(failed_files[:max_display])
+                    remaining = len(failed_files) - max_display
+                    file_list = f"{displayed_files}\n...and {remaining} more file(s)"
+                else:
+                    file_list = "\n".join(failed_files)
+                QMessageBox.warning(self, "Load Errors", 
+                                   f"Failed to load {len(failed_files)} file(s):\n{file_list}")
             
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
@@ -1007,8 +1020,22 @@ class LeidenEpiDocGUI(QMainWindow):
                     converted_item.setText("In Progress")
                 break
     
-    def on_file_conversion_completed(self, file_path):
-        """Update table to show checkmark for converted file and uncheck it"""
+    def on_file_conversion_completed(self, file_path, result):
+        """Update FileItem with conversion result and update table UI
+        
+        This method is called from the main/GUI thread via signal, ensuring
+        thread-safe updates to the FileItem objects.
+        """
+        # Update the FileItem with the conversion result in the GUI thread
+        if file_path in self.file_items:
+            file_item = self.file_items[file_path]
+            file_item.conversion_result = result
+            file_item.is_converted = True
+        else:
+            logger.warning(f"Conversion completed for unknown file: {file_path}")
+            return
+        
+        # Update the table UI
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.data(Qt.UserRole) == file_path:
@@ -1019,6 +1046,9 @@ class LeidenEpiDocGUI(QMainWindow):
                 # Uncheck the file
                 filename_item.setCheckState(Qt.Unchecked)
                 break
+        
+        # Update save button state since a file was just converted
+        self._update_save_button_state()
     
     def conversion_finished(self, result):
         """Handle batch conversion completion"""
@@ -1038,7 +1068,11 @@ class LeidenEpiDocGUI(QMainWindow):
         self._update_selection_button_states()
     
     def save_output(self):
-        """Save the output for all checked files based on the currently selected tab"""
+        """Save the output for all checked files based on the currently selected tab.
+        
+        If no files are checked, falls back to saving the currently selected file if it is converted.
+        The content saved depends on which tab is currently active (Input, EpiDoc, Notes, Analysis, or Full Output).
+        """
         # Get all checked files
         checked_files = []
         unconverted_files = []
@@ -1097,14 +1131,22 @@ class LeidenEpiDocGUI(QMainWindow):
         
         if tab_index == self.TAB_INPUT:
             return (file_item.input_text, file_item.file_name, original_ext)
-        elif tab_index == self.TAB_EPIDOC:
-            return (result.get("final_translation", ""), f"{base_name}_epidoc.xml", ".xml")
-        elif tab_index == self.TAB_NOTES:
-            return (result.get("notes", ""), f"{base_name}_notes.txt", ".txt")
-        elif tab_index == self.TAB_ANALYSIS:
-            return (result.get("analysis", ""), f"{base_name}_analysis.txt", ".txt")
-        else:  # self.TAB_FULL_OUTPUT
-            return (result.get("full_text", ""), f"{base_name}_full.txt", ".txt")
+        
+        # Define tab-specific output info (key, filename_suffix, extension)
+        tab_info = {
+            1: ("final_translation", "_epidoc.xml", ".xml"),  # EpiDoc
+            2: ("notes", "_notes.txt", ".txt"),               # Notes
+            3: ("analysis", "_analysis.txt", ".txt"),         # Analysis
+        }
+        
+        # Get tab-specific info, default to Full Output
+        key, suffix, ext = tab_info.get(tab_index, ("full_text", "_full.txt", ".txt"))
+        
+        # Defensive check: return empty content if result is None
+        if result is None:
+            return ("", f"{base_name}{suffix}", ext)
+        
+        return (result.get(key, ""), f"{base_name}{suffix}", ext)
     
     def _save_single_file(self, file_item, tab_index):
         """Save a single file with a file dialog"""
