@@ -805,8 +805,15 @@ class LeidenEpiDocGUI(QMainWindow):
                         failed_files.append(file_item.file_name)
             
             if failed_files:
+                max_display = 10
+                if len(failed_files) > max_display:
+                    displayed_files = "\n".join(failed_files[:max_display])
+                    remaining = len(failed_files) - max_display
+                    file_list = f"{displayed_files}\n...and {remaining} more file(s)"
+                else:
+                    file_list = "\n".join(failed_files)
                 QMessageBox.warning(self, "Load Errors", 
-                                   f"Failed to load {len(failed_files)} file(s):\n" + "\n".join(failed_files))
+                                   f"Failed to load {len(failed_files)} file(s):\n{file_list}")
             
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
