@@ -1238,7 +1238,6 @@ class LeidenEpiDocGUI(QMainWindow):
                 QMessageBox.information(self, "Save Complete", 
                                       f"Saved {saved_count} file(s) to {directory}\n"
                                       f"{skipped_count} file(s) skipped (no content)")
-
     
     def show_api_settings(self):
         dialog = APISettingsDialog(self, self.converter)
