@@ -17,13 +17,28 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView
+    QHeaderView, QAbstractItemView, QSplitterHandle
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont, QCursor
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
+
+
+class ResizableSplitterHandle(QSplitterHandle):
+    """Custom splitter handle with horizontal resize cursor"""
+    
+    def __init__(self, orientation, parent):
+        super().__init__(orientation, parent)
+        self.setCursor(Qt.SplitHCursor)
+
+
+class ResizableSplitter(QSplitter):
+    """Custom splitter that uses handles with resize cursor"""
+    
+    def createHandle(self):
+        return ResizableSplitterHandle(self.orientation(), self)
 
 
 class FileItem:
@@ -598,7 +613,7 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout = QVBoxLayout()
         
         # Main horizontal splitter: left pane (file list) and right pane (content viewer)
-        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter = ResizableSplitter(Qt.Horizontal)
         
         # LEFT PANE: File table with checkboxes and status
         left_pane = QWidget()
@@ -717,10 +732,8 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Make the splitter handle more obvious for easier resizing
         main_splitter.setHandleWidth(6)  # Slightly wider than default (~4px)
-        # Set horizontal split cursor on the handle to indicate it's draggable
-        handle = main_splitter.handle(1)
-        if handle:
-            handle.setCursor(QCursor(Qt.SplitHCursor))
+        # Add subtle visual indicator for the handle
+        main_splitter.setStyleSheet("QSplitter::handle { background-color: #d0d0d0; }")
         
         main_layout.addWidget(main_splitter)
         
