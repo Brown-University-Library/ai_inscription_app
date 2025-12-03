@@ -579,6 +579,13 @@ class LeidenEpiDocGUI(QMainWindow):
                            "tags (<analysis>, <notes>, <final_translation>). "
                            "Displaying the full unseparated response in the Full Output tab.")
     
+    # Tab index constants
+    TAB_INPUT = 0
+    TAB_EPIDOC = 1
+    TAB_NOTES = 2
+    TAB_ANALYSIS = 3
+    TAB_FULL_OUTPUT = 4
+    
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
@@ -1122,7 +1129,7 @@ class LeidenEpiDocGUI(QMainWindow):
         base_name = os.path.splitext(file_item.file_name)[0]
         original_ext = os.path.splitext(file_item.file_name)[1] or ".txt"
         
-        if tab_index == 0:  # Input
+        if tab_index == self.TAB_INPUT:
             return (file_item.input_text, file_item.file_name, original_ext)
         
         # Define tab-specific output info (key, filename_suffix, extension)
