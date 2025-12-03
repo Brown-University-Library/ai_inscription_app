@@ -53,7 +53,7 @@ class ConversionThread(QThread):
     finished = Signal(dict)
     progress = Signal(int, int)  # current, total
     file_started = Signal(str)  # file_path - emitted when file starts converting
-    file_completed = Signal(str)  # file_path - emitted when file finishes converting
+    file_completed = Signal(str, dict)  # file_path, result - emitted when file finishes converting
     
     def __init__(self, converter, file_items):
         super().__init__()
@@ -1013,8 +1013,22 @@ class LeidenEpiDocGUI(QMainWindow):
                     converted_item.setText("In Progress")
                 break
     
-    def on_file_conversion_completed(self, file_path):
-        """Update table to show checkmark for converted file and uncheck it"""
+    def on_file_conversion_completed(self, file_path, result):
+        """Update FileItem with conversion result and update table UI
+        
+        This method is called from the main/GUI thread via signal, ensuring
+        thread-safe updates to the FileItem objects.
+        """
+        # Update the FileItem with the conversion result in the GUI thread
+        if file_path in self.file_items:
+            file_item = self.file_items[file_path]
+            file_item.conversion_result = result
+            file_item.is_converted = True
+        else:
+            logger.warning(f"Conversion completed for unknown file: {file_path}")
+            return
+        
+        # Update the table UI
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.data(Qt.UserRole) == file_path:
@@ -1025,6 +1039,9 @@ class LeidenEpiDocGUI(QMainWindow):
                 # Uncheck the file
                 filename_item.setCheckState(Qt.Unchecked)
                 break
+        
+        # Update save button state since a file was just converted
+        self._update_save_button_state()
     
     def conversion_finished(self, result):
         """Handle batch conversion completion"""
