@@ -652,7 +652,7 @@ class LeidenEpiDocGUI(QMainWindow):
         button_area_layout.addWidget(self.convert_btn)
         
         # Save button (moved from right pane)
-        self.save_btn = QPushButton("Save Selected Output")
+        self.save_btn = QPushButton("Save Output of Checked Files")
         self.save_btn.setMinimumHeight(40)
         self.save_btn.clicked.connect(self.save_output)
         self.save_btn.setEnabled(False)
