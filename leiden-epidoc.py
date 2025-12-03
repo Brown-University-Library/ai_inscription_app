@@ -31,7 +31,18 @@ class ResizableSplitterHandle(QSplitterHandle):
     
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
-        self.setCursor(Qt.SplitHCursor)
+        # Enable mouse tracking so we get mouse events
+        self.setMouseTracking(True)
+    
+    def enterEvent(self, event):
+        """Change cursor to split cursor when mouse enters the handle"""
+        QApplication.setOverrideCursor(Qt.SplitHCursor)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Restore cursor when mouse leaves the handle"""
+        QApplication.restoreOverrideCursor()
+        super().leaveEvent(event)
 
 
 class ResizableSplitter(QSplitter):
@@ -730,10 +741,8 @@ class LeidenEpiDocGUI(QMainWindow):
         # Set 40/60 split (left/right)
         main_splitter.setSizes([480, 720])  # 40% : 60%
         
-        # Make the splitter handle more obvious for easier resizing
+        # Make the splitter handle slightly wider for easier resizing
         main_splitter.setHandleWidth(6)  # Slightly wider than default (~4px)
-        # Add subtle visual indicator for the handle
-        main_splitter.setStyleSheet("QSplitter::handle { background-color: #d0d0d0; }")
         
         main_layout.addWidget(main_splitter)
         
