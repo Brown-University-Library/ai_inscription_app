@@ -1090,7 +1090,12 @@ class LeidenEpiDocGUI(QMainWindow):
         
         if tab_index == 0:  # Input
             return (file_item.input_text, file_item.file_name, original_ext)
-        elif tab_index == 1:  # EpiDoc
+        
+        # Defensive check: return empty content if result is None
+        if result is None:
+            return ("", f"{base_name}_output.txt", ".txt")
+        
+        if tab_index == 1:  # EpiDoc
             return (result.get("final_translation", ""), f"{base_name}_epidoc.xml", ".xml")
         elif tab_index == 2:  # Notes
             return (result.get("notes", ""), f"{base_name}_notes.txt", ".txt")
