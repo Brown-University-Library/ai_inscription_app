@@ -624,12 +624,41 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_table.cellClicked.connect(self.on_file_selected)
         left_layout.addWidget(self.file_table)
         
+        # Button area - all action buttons in one place
+        button_area_layout = QVBoxLayout()
+        button_area_layout.setSpacing(8)
+        
+        # Selection buttons row
+        selection_btn_layout = QHBoxLayout()
+        selection_btn_layout.setSpacing(8)
+        
+        self.select_converted_btn = QPushButton("Select Converted")
+        self.select_converted_btn.clicked.connect(self.select_all_converted)
+        self.select_converted_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.select_converted_btn)
+        
+        self.select_unconverted_btn = QPushButton("Select Unconverted")
+        self.select_unconverted_btn.clicked.connect(self.select_all_unconverted)
+        self.select_unconverted_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.select_unconverted_btn)
+        
+        button_area_layout.addLayout(selection_btn_layout)
+        
         # Convert selected button
         self.convert_btn = QPushButton("Convert Selected to EpiDoc")
         self.convert_btn.setMinimumHeight(40)
         self.convert_btn.clicked.connect(self.convert_selected)
         self.convert_btn.setEnabled(False)
-        left_layout.addWidget(self.convert_btn)
+        button_area_layout.addWidget(self.convert_btn)
+        
+        # Save button (moved from right pane)
+        self.save_btn = QPushButton("Save Selected Output")
+        self.save_btn.setMinimumHeight(40)
+        self.save_btn.clicked.connect(self.save_output)
+        self.save_btn.setEnabled(False)
+        button_area_layout.addWidget(self.save_btn)
+        
+        left_layout.addLayout(button_area_layout)
         
         left_pane.setLayout(left_layout)
         main_splitter.addWidget(left_pane)
@@ -679,13 +708,6 @@ class LeidenEpiDocGUI(QMainWindow):
         self.tab_widget.addTab(self.full_output_text, "Full Output")
         
         right_layout.addWidget(self.tab_widget)
-        
-        # Save button at the bottom of right pane
-        self.save_btn = QPushButton("Save Selected Output")
-        self.save_btn.setMinimumHeight(40)
-        self.save_btn.clicked.connect(self.save_output)
-        self.save_btn.setEnabled(False)
-        right_layout.addWidget(self.save_btn)
         
         right_pane.setLayout(right_layout)
         main_splitter.addWidget(right_pane)
@@ -804,6 +826,57 @@ class LeidenEpiDocGUI(QMainWindow):
         converted_item.setTextAlignment(Qt.AlignCenter)
         converted_item.setFlags(converted_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
         self.file_table.setItem(row, 1, converted_item)
+        
+        # Update button states after adding a file
+        self._update_selection_button_states()
+    
+    def _update_selection_button_states(self):
+        """Update the enabled state of selection buttons based on available files"""
+        has_converted = False
+        has_unconverted = False
+        
+        for file_path, file_item in self.file_items.items():
+            if file_item.is_converted:
+                has_converted = True
+            else:
+                has_unconverted = True
+            
+            # Early exit if both states found
+            if has_converted and has_unconverted:
+                break
+        
+        self.select_converted_btn.setEnabled(has_converted)
+        self.select_unconverted_btn.setEnabled(has_unconverted)
+    
+    def select_all_converted(self):
+        """Select all files that have been converted"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    file_item = self.file_items[file_path]
+                    if file_item.is_converted:
+                        filename_item.setCheckState(Qt.Checked)
+                    else:
+                        filename_item.setCheckState(Qt.Unchecked)
+        
+        self.status_label.setText("Selected all converted files")
+    
+    def select_all_unconverted(self):
+        """Select all files that have not been converted"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    file_item = self.file_items[file_path]
+                    if not file_item.is_converted:
+                        filename_item.setCheckState(Qt.Checked)
+                    else:
+                        filename_item.setCheckState(Qt.Unchecked)
+        
+        self.status_label.setText("Selected all unconverted files")
     
     def on_file_selected(self, row, column):
         """Handle file selection from the table"""
@@ -936,6 +1009,9 @@ class LeidenEpiDocGUI(QMainWindow):
                 self._display_file_content(self.current_file_item)
         else:
             self.status_label.setText("Conversion failed")
+        
+        # Update selection button states after conversion
+        self._update_selection_button_states()
     
     def save_output(self):
         """Save the output for all checked files based on the currently selected tab"""
