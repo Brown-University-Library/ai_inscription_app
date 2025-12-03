@@ -36,12 +36,12 @@ class ResizableSplitterHandle(QSplitterHandle):
     
     def enterEvent(self, event):
         """Change cursor to split cursor when mouse enters the handle"""
-        QApplication.setOverrideCursor(Qt.SplitHCursor)
+        self.setCursor(Qt.SplitHCursor)
         super().enterEvent(event)
     
     def leaveEvent(self, event):
         """Restore cursor when mouse leaves the handle"""
-        QApplication.restoreOverrideCursor()
+        self.unsetCursor()
         super().leaveEvent(event)
 
 
