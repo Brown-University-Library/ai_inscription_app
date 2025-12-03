@@ -62,18 +62,20 @@ class ConversionThread(QThread):
     
     def run(self):
         total = len(self.file_items)
+        errors = []
         for idx, file_item in enumerate(self.file_items, 1):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
             file_item.conversion_result = result
             file_item.is_converted = True
+            if result.get("error"):
+                errors.append((file_item.file_name, result["error"]))
             self.file_completed.emit(file_item.file_path)
         
         # Emit finished signal with summary
-        self.finished.emit({"success": True, "converted_count": total})
-
-
+        success = len(errors) == 0
+        self.finished.emit({"success": success, "converted_count": total, "errors": errors})
 class LeidenToEpiDocConverter:
     # Pre-compiled regex patterns for better performance
     ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
