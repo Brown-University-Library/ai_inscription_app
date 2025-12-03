@@ -1091,18 +1091,21 @@ class LeidenEpiDocGUI(QMainWindow):
         if tab_index == 0:  # Input
             return (file_item.input_text, file_item.file_name, original_ext)
         
+        # Define tab-specific output info (key, filename_suffix, extension)
+        tab_info = {
+            1: ("final_translation", "_epidoc.xml", ".xml"),  # EpiDoc
+            2: ("notes", "_notes.txt", ".txt"),               # Notes
+            3: ("analysis", "_analysis.txt", ".txt"),         # Analysis
+        }
+        
+        # Get tab-specific info, default to Full Output
+        key, suffix, ext = tab_info.get(tab_index, ("full_text", "_full.txt", ".txt"))
+        
         # Defensive check: return empty content if result is None
         if result is None:
-            return ("", f"{base_name}_output.txt", ".txt")
+            return ("", f"{base_name}{suffix}", ext)
         
-        if tab_index == 1:  # EpiDoc
-            return (result.get("final_translation", ""), f"{base_name}_epidoc.xml", ".xml")
-        elif tab_index == 2:  # Notes
-            return (result.get("notes", ""), f"{base_name}_notes.txt", ".txt")
-        elif tab_index == 3:  # Analysis
-            return (result.get("analysis", ""), f"{base_name}_analysis.txt", ".txt")
-        else:  # Full Output
-            return (result.get("full_text", ""), f"{base_name}_full.txt", ".txt")
+        return (result.get(key, ""), f"{base_name}{suffix}", ext)
     
     def _save_single_file(self, file_item, tab_index):
         """Save a single file with a file dialog"""
