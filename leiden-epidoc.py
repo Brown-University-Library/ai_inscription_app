@@ -593,6 +593,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.word_wrap_enabled = True
         self.file_items = {}  # Dictionary mapping file_path to FileItem
         self.current_file_item = None  # Currently selected file
+        self.missing_tags_warned = set()  # Track files that have shown the missing tags warning
         self.setup_ui()
     
     def setup_ui(self):
@@ -949,8 +950,10 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.notes_text.setPlainText("")
                 self.analysis_text.setPlainText("")
                 self.full_output_text.setPlainText(result.get("full_text", ""))
-                if not result.get("error"):
+                # Only show warning once per file
+                if not result.get("error") and file_item.file_path not in self.missing_tags_warned:
                     QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
+                    self.missing_tags_warned.add(file_item.file_path)
         else:
             # Not yet converted
             self.epidoc_text.setPlainText("")
@@ -1012,6 +1015,8 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def on_file_conversion_started(self, file_path):
         """Update table to show 'In Progress' for the file being converted"""
+        # Clear warning tracking for this file so user gets warned again if re-conversion also has missing tags
+        self.missing_tags_warned.discard(file_path)
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.data(Qt.UserRole) == file_path:
