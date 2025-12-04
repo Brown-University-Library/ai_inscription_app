@@ -913,7 +913,7 @@ class LeidenEpiDocGUI(QMainWindow):
         """Enable save button only if current file or any checked file is converted"""
         enable = False
         # Check if current file is converted
-        if hasattr(self, "current_file_item") and self.current_file_item and getattr(self.current_file_item, "is_converted", False):
+        if self.current_file_item and self.current_file_item.is_converted:
             enable = True
         else:
             # Check if any checked file is converted
@@ -922,7 +922,7 @@ class LeidenEpiDocGUI(QMainWindow):
                 if filename_item and filename_item.checkState() == Qt.Checked:
                     file_path = filename_item.data(Qt.UserRole)
                     file_item = self.file_items.get(file_path)
-                    if file_item and getattr(file_item, "is_converted", False):
+                    if file_item and file_item.is_converted:
                         enable = True
                         break
         self.save_btn.setEnabled(enable)
