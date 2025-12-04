@@ -27,7 +27,17 @@ CONFIG_FILE = "leiden_epidoc_config.json"
 
 
 class FileItem:
-    """Represents a single file with its content and conversion state"""
+    """Represents a single file with its content and conversion state.
+    
+    Attributes:
+        file_path (str): The full path to the file on disk.
+        file_name (str): The basename of the file (extracted from file_path).
+        input_text (str): The raw text content loaded from the file.
+        conversion_result (str | None): The EpiDoc XML result after conversion,
+            or None if not yet converted.
+        is_converted (bool): Flag indicating whether the file has been
+            successfully converted to EpiDoc XML.
+    """
     
     def __init__(self, file_path: str):
         self.file_path = file_path
