@@ -67,11 +67,9 @@ class ConversionThread(QThread):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
-            file_item.conversion_result = result
-            file_item.is_converted = True
             if result.get("error"):
                 errors.append((file_item.file_name, result["error"]))
-            self.file_completed.emit(file_item.file_path)
+            self.file_completed.emit(file_item.file_path, result)
         
         # Emit finished signal with summary
         success = len(errors) == 0
@@ -913,7 +911,7 @@ class LeidenEpiDocGUI(QMainWindow):
         """Enable save button only if current file or any checked file is converted"""
         enable = False
         # Check if current file is converted
-        if hasattr(self, "current_file_item") and self.current_file_item and getattr(self.current_file_item, "is_converted", False):
+        if self.current_file_item and self.current_file_item.is_converted:
             enable = True
         else:
             # Check if any checked file is converted
@@ -922,7 +920,7 @@ class LeidenEpiDocGUI(QMainWindow):
                 if filename_item and filename_item.checkState() == Qt.Checked:
                     file_path = filename_item.data(Qt.UserRole)
                     file_item = self.file_items.get(file_path)
-                    if file_item and getattr(file_item, "is_converted", False):
+                    if file_item and file_item.is_converted:
                         enable = True
                         break
         self.save_btn.setEnabled(enable)
