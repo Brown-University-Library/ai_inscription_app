@@ -1199,14 +1199,14 @@ class LeidenEpiDocGUI(QMainWindow):
         
         saved_count = 0
         error_count = 0
-        skipped_count = 0
+        skipped_files = []  # Track skipped file names for user feedback
         used_names = set()  # Track used names to avoid collisions
         
         for file_item in file_items:
             content, default_name, _ = self._get_output_info_for_tab(file_item, tab_index)
             
             if not content.strip():
-                skipped_count += 1
+                skipped_files.append(file_item.file_name)
                 continue
             
             # Handle file name collisions
@@ -1229,19 +1229,30 @@ class LeidenEpiDocGUI(QMainWindow):
                 logger.error(f"Error saving {final_name}: {str(e)}")
                 error_count += 1
         
+        # Format skipped files message if any
+        skipped_count = len(skipped_files)
+        skipped_msg = ""
+        if skipped_files:
+            max_display = 10
+            if len(skipped_files) > max_display:
+                skipped_names = ", ".join(skipped_files[:max_display]) + f"... and {len(skipped_files) - max_display} more"
+            else:
+                skipped_names = ", ".join(skipped_files)
+            skipped_msg = f"\n\nSkipped (no content): {skipped_names}"
+        
         # Show summary
         if error_count > 0:
             self.status_label.setText(f"Saved {saved_count} file(s), {error_count} error(s), {skipped_count} skipped")
             QMessageBox.warning(self, "Save Complete", 
                               f"Saved {saved_count} file(s) to {directory}\n"
-                              f"{error_count} file(s) had errors\n"
-                              f"{skipped_count} file(s) skipped (no content)")
+                              f"{error_count} file(s) had errors"
+                              f"{skipped_msg}")
         else:
             self.status_label.setText(f"Saved {saved_count} file(s) to {directory}")
             if skipped_count > 0:
                 QMessageBox.information(self, "Save Complete", 
-                                      f"Saved {saved_count} file(s) to {directory}\n"
-                                      f"{skipped_count} file(s) skipped (no content)")
+                                      f"Saved {saved_count} file(s) to {directory}"
+                                      f"{skipped_msg}")
     
     def show_api_settings(self):
         dialog = APISettingsDialog(self, self.converter)
