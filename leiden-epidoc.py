@@ -962,6 +962,10 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def convert_selected(self):
         """Convert all selected files"""
+        # Guard against starting a new conversion while one is already running
+        if self.conversion_thread and self.conversion_thread.isRunning():
+            return
+        
         selected_items = []
         selected_file_paths = []
         for row in range(self.file_table.rowCount()):
@@ -1061,6 +1065,7 @@ class LeidenEpiDocGUI(QMainWindow):
     def conversion_finished(self, result):
         """Handle batch conversion completion"""
         self.convert_btn.setEnabled(True)
+        self.conversion_thread = None
         
         if result.get("success"):
             count = result.get("converted_count", 0)
