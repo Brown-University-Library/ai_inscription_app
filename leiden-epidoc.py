@@ -1104,7 +1104,11 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Warn if some checked files are not converted
         if unconverted_files:
-            unconverted_names = ", ".join([f.file_name for f in unconverted_files])
+            max_display = 10
+            if len(unconverted_files) > max_display:
+                unconverted_names = ", ".join([f.file_name for f in unconverted_files[:max_display]]) + f"... and {len(unconverted_files) - max_display} more"
+            else:
+                unconverted_names = ", ".join([f.file_name for f in unconverted_files])
             if checked_files:
                 reply = QMessageBox.warning(
                     self, "Some Files Not Converted",
