@@ -1070,7 +1070,36 @@ class LeidenEpiDocGUI(QMainWindow):
             if self.current_file_item:
                 self._display_file_content(self.current_file_item)
         else:
-            self.status_label.setText("Conversion failed")
+            errors = result.get("errors", [])
+            # converted_count represents total files attempted (not just successful)
+            total_attempted = result.get("converted_count", 0)
+            failed_count = len(errors)
+            success_count = total_attempted - failed_count
+            
+            # Update status label with summary
+            self.status_label.setText(
+                f"Conversion completed with errors: {success_count} succeeded, {failed_count} failed"
+            )
+            
+            # Show dialog with error details
+            if errors:
+                # Limit to first 10 errors to avoid extremely long dialogs
+                errors_to_show = errors[:10] if len(errors) > 10 else errors
+                error_details = "\n\n".join(
+                    f"• {filename}:\n  {error}" for filename, error in errors_to_show
+                )
+                if len(errors) > 10:
+                    error_details += f"\n\n... and {len(errors) - 10} more error(s)"
+                
+                QMessageBox.warning(
+                    self,
+                    "Conversion Errors",
+                    f"The following {failed_count} file(s) failed to convert:\n\n{error_details}"
+                )
+            
+            # Refresh the display if a file is currently selected
+            if self.current_file_item:
+                self._display_file_content(self.current_file_item)
         
         # Update selection button states after conversion
         self._update_selection_button_states()
