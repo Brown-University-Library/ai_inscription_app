@@ -1045,7 +1045,7 @@ class LeidenEpiDocGUI(QMainWindow):
                 # Update converted column to show checkmark
                 converted_item = self.file_table.item(row, 1)
                 if converted_item:
-                    converted_item.setText("✓")
+                    converted_item.setText("✓ Converted")
                 # Uncheck the file
                 filename_item.setCheckState(Qt.Unchecked)
                 break
