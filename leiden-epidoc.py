@@ -67,11 +67,9 @@ class ConversionThread(QThread):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
             result = self.converter.get_epidoc(file_item.input_text)
-            file_item.conversion_result = result
-            file_item.is_converted = True
             if result.get("error"):
                 errors.append((file_item.file_name, result["error"]))
-            self.file_completed.emit(file_item.file_path)
+            self.file_completed.emit(file_item.file_path, result)
         
         # Emit finished signal with summary
         success = len(errors) == 0
