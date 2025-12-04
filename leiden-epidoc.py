@@ -35,6 +35,7 @@ class FileItem:
         self.input_text = ""
         self.conversion_result = None
         self.is_converted = False
+        self.has_error = False  # Track if conversion failed
         
     def load_content(self):
         """Load the file content"""
@@ -908,19 +909,19 @@ class LeidenEpiDocGUI(QMainWindow):
                 self._update_save_button_state()
     
     def _update_save_button_state(self):
-        """Enable save button only if current file or any checked file is converted"""
+        """Enable save button only if current file or any checked file is successfully converted (no errors)"""
         enable = False
-        # Check if current file is converted
-        if self.current_file_item and self.current_file_item.is_converted:
+        # Check if current file is successfully converted (no errors)
+        if self.current_file_item and self.current_file_item.is_converted and not self.current_file_item.has_error:
             enable = True
         else:
-            # Check if any checked file is converted
+            # Check if any checked file is successfully converted (no errors)
             for row in range(self.file_table.rowCount()):
                 filename_item = self.file_table.item(row, 0)
                 if filename_item and filename_item.checkState() == Qt.Checked:
                     file_path = filename_item.data(Qt.UserRole)
                     file_item = self.file_items.get(file_path)
-                    if file_item and file_item.is_converted:
+                    if file_item and file_item.is_converted and not file_item.has_error:
                         enable = True
                         break
         self.save_btn.setEnabled(enable)
@@ -1034,6 +1035,7 @@ class LeidenEpiDocGUI(QMainWindow):
             file_item = self.file_items[file_path]
             file_item.conversion_result = result
             file_item.is_converted = True
+            file_item.has_error = bool(result.get("error"))
         else:
             logger.warning(f"Conversion completed for unknown file: {file_path}")
             return
@@ -1042,10 +1044,13 @@ class LeidenEpiDocGUI(QMainWindow):
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.data(Qt.UserRole) == file_path:
-                # Update converted column to show checkmark
+                # Update converted column to show checkmark or error indicator
                 converted_item = self.file_table.item(row, 1)
                 if converted_item:
-                    converted_item.setText("✓")
+                    if file_item.has_error:
+                        converted_item.setText("✗")
+                    else:
+                        converted_item.setText("✓")
                 # Uncheck the file
                 filename_item.setCheckState(Qt.Unchecked)
                 break
@@ -1076,9 +1081,10 @@ class LeidenEpiDocGUI(QMainWindow):
         If no files are checked, falls back to saving the currently selected file if it is converted.
         The content saved depends on which tab is currently active (Input, EpiDoc, Notes, Analysis, or Full Output).
         """
-        # Get all checked files
+        # Get all checked files, categorized by conversion state
         checked_files = []
         unconverted_files = []
+        error_files = []
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 0)
             if filename_item and filename_item.checkState() == Qt.Checked:
@@ -1086,13 +1092,23 @@ class LeidenEpiDocGUI(QMainWindow):
                 if file_path in self.file_items:
                     file_item = self.file_items[file_path]
                     if file_item.is_converted:
-                        checked_files.append(file_item)
+                        if file_item.has_error:
+                            error_files.append(file_item)
+                        else:
+                            checked_files.append(file_item)
                     else:
                         unconverted_files.append(file_item)
         
         # If nothing is checked, fall back to current file
-        if not checked_files and not unconverted_files:
+        if not checked_files and not unconverted_files and not error_files:
             if self.current_file_item and self.current_file_item.is_converted:
+                if self.current_file_item.has_error:
+                    QMessageBox.warning(
+                        self,
+                        "Conversion Error",
+                        "The current file had a conversion error and cannot be saved."
+                    )
+                    return
                 checked_files = [self.current_file_item]
             else:
                 QMessageBox.warning(
@@ -1102,25 +1118,42 @@ class LeidenEpiDocGUI(QMainWindow):
                 )
                 return
         
-        # Warn if some checked files are not converted
+        # Build warning message for files that will be skipped
+        skipped_messages = []
+        
+        # Warn about unconverted files
         if unconverted_files:
             max_display = 10
             if len(unconverted_files) > max_display:
                 unconverted_names = ", ".join([f.file_name for f in unconverted_files[:max_display]]) + f"... and {len(unconverted_files) - max_display} more"
             else:
                 unconverted_names = ", ".join([f.file_name for f in unconverted_files])
+            skipped_messages.append(f"Not converted: {unconverted_names}")
+        
+        # Warn about files with errors
+        if error_files:
+            max_display = 10
+            if len(error_files) > max_display:
+                error_names = ", ".join([f.file_name for f in error_files[:max_display]]) + f"... and {len(error_files) - max_display} more"
+            else:
+                error_names = ", ".join([f.file_name for f in error_files])
+            skipped_messages.append(f"Conversion errors: {error_names}")
+        
+        # Show warning if there are files to skip
+        if skipped_messages:
+            skip_message = "\n\n".join(skipped_messages)
             if checked_files:
                 reply = QMessageBox.warning(
-                    self, "Some Files Not Converted",
-                    f"The following files have not been converted and will be skipped:\n\n{unconverted_names}\n\n"
-                    f"Do you want to continue saving the {len(checked_files)} converted file(s)?",
+                    self, "Some Files Cannot Be Saved",
+                    f"The following files will be skipped:\n\n{skip_message}\n\n"
+                    f"Do you want to continue saving the {len(checked_files)} successfully converted file(s)?",
                     QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.No:
                     return
             else:
-                QMessageBox.warning(self, "No Converted Files", 
-                                  f"None of the selected files have been converted yet:\n\n{unconverted_names}\n\n"
-                                  "Please convert the files before saving.")
+                QMessageBox.warning(self, "No Files to Save", 
+                                  f"None of the selected files can be saved:\n\n{skip_message}\n\n"
+                                  "Please convert the files successfully before saving.")
                 return
         
         # Determine what to save based on current tab
