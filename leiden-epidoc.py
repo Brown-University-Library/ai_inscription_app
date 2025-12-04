@@ -1060,6 +1060,7 @@ class LeidenEpiDocGUI(QMainWindow):
     def conversion_finished(self, result):
         """Handle batch conversion completion"""
         self.convert_btn.setEnabled(True)
+        self.conversion_thread = None
         
         if result.get("success"):
             count = result.get("converted_count", 0)
