@@ -1209,17 +1209,17 @@ class LeidenEpiDocGUI(QMainWindow):
                 skipped_count += 1
                 continue
             
-            # Handle file name collisions
+            # Handle file name collisions (in batch and on disk)
             final_name = default_name
-            if default_name in used_names:
-                base, ext = os.path.splitext(default_name)
-                counter = 1
-                while final_name in used_names:
-                    final_name = f"{base}_{counter}{ext}"
-                    counter += 1
-            
-            used_names.add(final_name)
+            base, ext = os.path.splitext(default_name)
+            counter = 1
             file_path = os.path.join(directory, final_name)
+            while final_name in used_names or os.path.exists(file_path):
+                final_name = f"{base}_{counter}{ext}"
+                file_path = os.path.join(directory, final_name)
+                counter += 1
+            used_names.add(final_name)
+            # file_path is already set above
             
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
