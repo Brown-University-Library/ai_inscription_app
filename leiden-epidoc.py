@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
-    QTabBar, QStackedWidget, QRadioButton, QButtonGroup
+    QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -25,21 +26,65 @@ from PySide6.QtGui import QAction, QFont
 CONFIG_FILE = "leiden_epidoc_config.json"
 
 
+class FileItem:
+    """Represents a single file with its content and conversion state.
+    
+    Attributes:
+        file_path (str): The full path to the file on disk.
+        file_name (str): The basename of the file (extracted from file_path).
+        input_text (str): The raw text content loaded from the file.
+        conversion_result (str | None): The EpiDoc XML result after conversion,
+            or None if not yet converted.
+        is_converted (bool): Flag indicating whether the file has been
+            successfully converted to EpiDoc XML.
+    """
+    
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.file_name = os.path.basename(file_path)
+        self.input_text = ""
+        self.conversion_result = None
+        self.is_converted = False
+        self.has_error = False  # Track if conversion failed
+        
+    def load_content(self):
+        """Load the file content"""
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                self.input_text = f.read()
+            return True
+        except Exception as e:
+            logger.error(f"Error loading file {self.file_path}: {str(e)}")
+            return False
+
+
 class ConversionThread(QThread):
     """Thread for running conversion without blocking UI"""
     
     finished = Signal(dict)
+    progress = Signal(int, int)  # current, total
+    file_started = Signal(str)  # file_path - emitted when file starts converting
+    file_completed = Signal(str, dict)  # file_path, result - emitted when file finishes converting
     
-    def __init__(self, converter, leiden_text):
+    def __init__(self, converter, file_items):
         super().__init__()
         self.converter = converter
-        self.leiden_text = leiden_text
+        self.file_items = file_items  # List of FileItem objects to convert
     
     def run(self):
-        result = self.converter.get_epidoc(self.leiden_text)
-        self.finished.emit(result)
-
-
+        total = len(self.file_items)
+        errors = []
+        for idx, file_item in enumerate(self.file_items, 1):
+            self.file_started.emit(file_item.file_path)
+            self.progress.emit(idx, total)
+            result = self.converter.get_epidoc(file_item.input_text)
+            if result.get("error"):
+                errors.append((file_item.file_name, result["error"]))
+            self.file_completed.emit(file_item.file_path, result)
+        
+        # Emit finished signal with summary
+        success = len(errors) == 0
+        self.finished.emit({"success": success, "converted_count": total, "errors": errors})
 class LeidenToEpiDocConverter:
     # Pre-compiled regex patterns for better performance
     ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
@@ -535,123 +580,29 @@ class ExamplesEditorDialog(QDialog):
         self.accept()
 
 
-class SaveContentDialog(QDialog):
-    """Dialog for saving Notes, Analysis, or Full Output with radio button selection"""
-    
-    def __init__(self, parent, converter, last_result, current_tab_index):
-        super().__init__(parent)
-        self.converter = converter
-        self.last_result = last_result
-        self.current_tab_index = current_tab_index
-        self.setWindowTitle("Save to File")
-        self.setModal(True)
-        self.setMinimumWidth(400)
-        
-        layout = QVBoxLayout()
-        
-        # Info label
-        info_label = QLabel("Select content to save:")
-        layout.addWidget(info_label)
-        
-        # Radio buttons for content selection
-        self.button_group = QButtonGroup(self)
-        
-        self.notes_radio = QRadioButton("Notes")
-        self.analysis_radio = QRadioButton("Analysis")
-        self.full_output_radio = QRadioButton("Full Output")
-        
-        self.button_group.addButton(self.notes_radio, 0)
-        self.button_group.addButton(self.analysis_radio, 1)
-        self.button_group.addButton(self.full_output_radio, 2)
-        
-        layout.addWidget(self.notes_radio)
-        layout.addWidget(self.analysis_radio)
-        layout.addWidget(self.full_output_radio)
-        
-        # Default to the currently displayed tab
-        if current_tab_index == 0:
-            self.notes_radio.setChecked(True)
-        elif current_tab_index == 1:
-            self.analysis_radio.setChecked(True)
-        else:
-            self.full_output_radio.setChecked(True)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self.save_content)
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(save_btn)
-        button_layout.addWidget(cancel_btn)
-        button_layout.addStretch()
-        
-        layout.addLayout(button_layout)
-        self.setLayout(layout)
-    
-    def save_content(self):
-        """Save the selected content to a file"""
-        # Determine which content to save
-        selected_id = self.button_group.checkedId()
-        
-        if selected_id == 0:  # Notes
-            content = self.last_result.get("notes", "")
-            default_name = "epidoc_notes.txt"
-            content_type = "notes"
-            display_name = "Notes"
-        elif selected_id == 1:  # Analysis
-            content = self.last_result.get("analysis", "")
-            default_name = "epidoc_analysis.txt"
-            content_type = "analysis"
-            display_name = "Analysis"
-        else:  # Full Output
-            content = self.last_result.get("full_text", "")
-            default_name = "epidoc_full_output.txt"
-            content_type = "full output"
-            display_name = "Full Output"
-        
-        if not content.strip():
-            QMessageBox.warning(self, "No Content", 
-                              f"No {content_type} to save. Please convert text first.")
-            return
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, f"Save {display_name}", 
-            os.path.join(self.converter.save_location, default_name),
-            "Text Files (*.txt);;XML Files (*.xml);;All Files (*)")
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                QMessageBox.information(self, "Success", 
-                                      f"Saved {content_type} to: {file_path}")
-                # Update parent's status label
-                if hasattr(self.parent(), 'status_label'):
-                    self.parent().status_label.setText(f"Saved {content_type} to: {file_path}")
-                self.accept()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
-                # Update parent's status label on error
-                if hasattr(self.parent(), 'status_label'):
-                    self.parent().status_label.setText(f"Error saving file: {str(e)}")
-
-
 class LeidenEpiDocGUI(QMainWindow):
     """Main application window for Leiden to EpiDoc conversion"""
     
     # Constants for UI messages
-    CONVERTING_MESSAGE = "Converting... Please wait."
     MISSING_TAGS_WARNING = ("Warning: The response from the AI did not include the expected "
                            "tags (<analysis>, <notes>, <final_translation>). "
-                           "Displaying the full unseparated response in the Full Results tab.")
+                           "Displaying the full unseparated response in the Full Output tab.")
+    
+    # Tab index constants
+    TAB_INPUT = 0
+    TAB_EPIDOC = 1
+    TAB_NOTES = 2
+    TAB_ANALYSIS = 3
+    TAB_FULL_OUTPUT = 4
     
     def __init__(self):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
         self.conversion_thread = None
         self.word_wrap_enabled = True
-        self.last_result = None
+        self.file_items = {}  # Dictionary mapping file_path to FileItem
+        self.current_file_item = None  # Currently selected file
+        self.missing_tags_warned = set()  # Track files that have shown the missing tags warning
         self.setup_ui()
     
     def setup_ui(self):
@@ -665,129 +616,130 @@ class LeidenEpiDocGUI(QMainWindow):
         
         main_layout = QVBoxLayout()
         
-        # Input section
-        input_label = QLabel("Input (Leiden Convention):")
-        main_layout.addWidget(input_label)
+        # Main horizontal splitter: left pane (file list) and right pane (content viewer)
+        main_splitter = QSplitter(Qt.Horizontal)
         
-        load_btn = QPushButton("Load from File")
-        load_btn.clicked.connect(self.load_file)
-        main_layout.addWidget(load_btn)
-        self.input_text = QTextEdit()
-        self.input_text.setPlaceholderText("Enter Leiden Convention text here or load from file...")
-        self.input_text.setMinimumHeight(250)
-        self.input_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.input_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        main_layout.addWidget(self.input_text)
+        # LEFT PANE: File table with checkboxes and status
+        left_pane = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Convert button
-        self.convert_btn = QPushButton("Convert to EpiDoc")
+        # Load files button
+        load_files_btn = QPushButton("Load Files")
+        load_files_btn.clicked.connect(self.load_files)
+        left_layout.addWidget(load_files_btn)
+        
+        # File table
+        files_label = QLabel("Loaded Files:")
+        left_layout.addWidget(files_label)
+        
+        self.file_table = QTableWidget()
+        self.file_table.setColumnCount(2)
+        self.file_table.setHorizontalHeaderLabels(["Filename", "Converted"])
+        self.file_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.file_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.file_table.cellClicked.connect(self.on_file_selected)
+        left_layout.addWidget(self.file_table)
+        
+        # Button area - all action buttons in one place
+        button_area_layout = QVBoxLayout()
+        button_area_layout.setSpacing(8)
+        
+        # Selection buttons row
+        selection_btn_layout = QHBoxLayout()
+        selection_btn_layout.setSpacing(8)
+        
+        self.select_converted_btn = QPushButton("Select Converted")
+        self.select_converted_btn.clicked.connect(self.select_all_converted)
+        self.select_converted_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.select_converted_btn)
+        
+        self.select_unconverted_btn = QPushButton("Select Unconverted")
+        self.select_unconverted_btn.clicked.connect(self.select_all_unconverted)
+        self.select_unconverted_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.select_unconverted_btn)
+        
+        button_area_layout.addLayout(selection_btn_layout)
+        
+        # Convert selected button
+        self.convert_btn = QPushButton("Convert Selected to EpiDoc")
         self.convert_btn.setMinimumHeight(40)
-        self.convert_btn.clicked.connect(self.convert_text)
-        main_layout.addWidget(self.convert_btn)
+        self.convert_btn.clicked.connect(self.convert_selected)
+        self.convert_btn.setEnabled(False)
+        button_area_layout.addWidget(self.convert_btn)
         
-        # Output section with 4-quadrant layout
-        output_label = QLabel("Output (EpiDoc XML):")
-        main_layout.addWidget(output_label)
+        # Save button (moved from right pane)
+        self.save_btn = QPushButton("Save Output of Checked Files")
+        self.save_btn.setMinimumHeight(40)
+        self.save_btn.clicked.connect(self.save_output)
+        self.save_btn.setEnabled(False)
+        button_area_layout.addWidget(self.save_btn)
         
-        # Create a vertical splitter for top and bottom panels
-        main_splitter = QSplitter(Qt.Vertical)
+        left_layout.addLayout(button_area_layout)
         
-        # TOP PANEL (short) - split into left and right
-        top_panel = QWidget()
-        top_layout = QHBoxLayout()
-        top_layout.setContentsMargins(0, 0, 0, 0)
+        left_pane.setLayout(left_layout)
+        main_splitter.addWidget(left_pane)
         
-        # Top-left: Label and button
-        top_left = QWidget()
-        top_left_layout = QVBoxLayout()
-        top_left_layout.setContentsMargins(0, 0, 0, 0)
+        # RIGHT PANE: Content viewer with tabs
+        right_pane = QWidget()
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
         
-        translation_label = QLabel("Final Translation:")
-        top_left_layout.addWidget(translation_label)
+        # Tab widget for different views
+        self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
-        save_translation_btn = QPushButton("Save Translation to File")
-        save_translation_btn.clicked.connect(self.save_translation)
-        top_left_layout.addWidget(save_translation_btn)
+        # Input tab
+        self.input_text = QTextEdit()
+        self.input_text.setReadOnly(True)
+        self.input_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.input_text.setPlaceholderText("Select a file to view its input text...")
+        self.tab_widget.addTab(self.input_text, "Input")
         
-        top_left.setLayout(top_left_layout)
-        top_layout.addWidget(top_left)
+        # EpiDoc tab
+        self.epidoc_text = QTextEdit()
+        self.epidoc_text.setReadOnly(True)
+        self.epidoc_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.epidoc_text.setPlaceholderText("Convert the file to view EpiDoc XML...")
+        self.tab_widget.addTab(self.epidoc_text, "EpiDoc")
         
-        # Top-right: Save button and tab bar (separated from content)
-        top_right = QWidget()
-        top_right_layout = QVBoxLayout()
-        top_right_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Add save button
-        save_content_btn = QPushButton("Save to File")
-        save_content_btn.clicked.connect(self.save_content_dialog)
-        top_right_layout.addWidget(save_content_btn)
-
-        # Add stretch to push tab bar to bottom
-        top_right_layout.addStretch()
-
-        self.tab_bar = QTabBar()
-        self.tab_bar.setDrawBase(False)
-        self.tab_bar.addTab("Notes")
-        self.tab_bar.addTab("Analysis")
-        self.tab_bar.addTab("Full Results")
-        self.tab_bar.currentChanged.connect(self.on_tab_changed)
-        top_right_layout.addWidget(self.tab_bar)
-        
-        top_right.setLayout(top_right_layout)
-        top_layout.addWidget(top_right)
-
-        top_panel.setLayout(top_layout)
-        main_splitter.addWidget(top_panel)
-        
-        # BOTTOM PANEL (tall) - split into left and right
-        bottom_splitter = QSplitter(Qt.Horizontal)
-        
-        # Bottom-left: Translation text area
-        self.translation_text = QTextEdit()
-        self.translation_text.setReadOnly(True)
-        self.translation_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.translation_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        bottom_splitter.addWidget(self.translation_text)
-        
-        # Bottom-right: Stacked widget to show selected tab content
-        self.tab_content_stack = QStackedWidget()
-        
-        # Notes tab content
+        # Notes tab
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
         self.notes_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.notes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tab_content_stack.addWidget(self.notes_text)
+        self.notes_text.setPlaceholderText("Convert the file to view notes...")
+        self.tab_widget.addTab(self.notes_text, "Notes")
         
-        # Analysis tab content
+        # Analysis tab
         self.analysis_text = QTextEdit()
         self.analysis_text.setReadOnly(True)
         self.analysis_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.analysis_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tab_content_stack.addWidget(self.analysis_text)
+        self.analysis_text.setPlaceholderText("Convert the file to view analysis...")
+        self.tab_widget.addTab(self.analysis_text, "Analysis")
         
-        # Full Results tab content
-        self.full_results_text = QTextEdit()
-        self.full_results_text.setReadOnly(True)
-        self.full_results_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.full_results_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.tab_content_stack.addWidget(self.full_results_text)
+        # Full Output tab
+        self.full_output_text = QTextEdit()
+        self.full_output_text.setReadOnly(True)
+        self.full_output_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.full_output_text.setPlaceholderText("Convert the file to view full output...")
+        self.tab_widget.addTab(self.full_output_text, "Full Output")
         
-        bottom_splitter.addWidget(self.tab_content_stack)
+        right_layout.addWidget(self.tab_widget)
         
-        # Set 50/50 split for bottom panel
-        bottom_splitter.setSizes([600, 600])
+        right_pane.setLayout(right_layout)
+        main_splitter.addWidget(right_pane)
         
-        main_splitter.addWidget(bottom_splitter)
-        
-        # Set height ratio for top:bottom panels (top shorter, bottom taller)
-        # Set 1:4 ratio (top:bottom)
-        main_splitter.setSizes([100, 400])
+        # Set 40/60 split (left/right)
+        main_splitter.setSizes([480, 720])  # 40% : 60%
         
         main_layout.addWidget(main_splitter)
         
         # Status bar
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("Ready - Load files to begin")
+        self.status_label.setMaximumHeight(25)
+        self.status_label.setStyleSheet("padding: 5px;")
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
@@ -797,15 +749,12 @@ class LeidenEpiDocGUI(QMainWindow):
 
         # File menu
         file_menu = menu_bar.addMenu("File")
-        load_action = QAction("Load File", self)
-        load_action.triggered.connect(self.load_file)
+        load_action = QAction("Load Files", self)
+        load_action.triggered.connect(self.load_files)
         file_menu.addAction(load_action)
-        save_translation_action = QAction("Save Translation", self)
-        save_translation_action.triggered.connect(self.save_translation)
-        file_menu.addAction(save_translation_action)
-        save_full_action = QAction("Save Full Output", self)
-        save_full_action.triggered.connect(self.save_output)
-        file_menu.addAction(save_full_action)
+        save_action = QAction("Save Output", self)
+        save_action.triggered.connect(self.save_output)
+        file_menu.addAction(save_action)
         file_menu.addSeparator()
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
@@ -835,117 +784,220 @@ class LeidenEpiDocGUI(QMainWindow):
         settings_menu.addAction(edit_examples_action)
 
     def on_tab_changed(self, index):
-        """Handle tab bar selection change to update the stacked widget"""
-        self.tab_content_stack.setCurrentIndex(index)
+        """Handle tab change to update which content is displayed"""
+        # Content is already displayed in the tab widget, no action needed
+        pass
 
     def toggle_word_wrap(self):
         enabled = self.word_wrap_action.isChecked()
         self.word_wrap_enabled = enabled
         mode = QTextEdit.WidgetWidth if enabled else QTextEdit.NoWrap
         self.input_text.setLineWrapMode(mode)
-        self.translation_text.setLineWrapMode(mode)
+        self.epidoc_text.setLineWrapMode(mode)
         self.notes_text.setLineWrapMode(mode)
         self.analysis_text.setLineWrapMode(mode)
-        self.full_results_text.setLineWrapMode(mode)
+        self.full_output_text.setLineWrapMode(mode)
         # Show horizontal scrollbars only if word wrap is off
         h_policy = Qt.ScrollBarAsNeeded if not enabled else Qt.ScrollBarAlwaysOff
         self.input_text.setHorizontalScrollBarPolicy(h_policy)
-        self.translation_text.setHorizontalScrollBarPolicy(h_policy)
+        self.epidoc_text.setHorizontalScrollBarPolicy(h_policy)
         self.notes_text.setHorizontalScrollBarPolicy(h_policy)
         self.analysis_text.setHorizontalScrollBarPolicy(h_policy)
-        self.full_results_text.setHorizontalScrollBarPolicy(h_policy)
+        self.full_output_text.setHorizontalScrollBarPolicy(h_policy)
     
-    def load_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load Leiden Text File", "", "Text Files (*.txt);;All Files (*)")
+    def load_files(self):
+        """Load multiple files for batch processing"""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self, "Load Leiden Text Files", "", "Text Files (*.txt);;All Files (*)")
         
-        if file_path:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                # Qt handles RTL/BiDi automatically - just set the text!
-                self.input_text.setPlainText(content)
-                self.status_label.setText(f"Loaded file: {file_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error loading file: {str(e)}")
-                self.status_label.setText(f"Error loading file: {str(e)}")
+        if file_paths:
+            loaded_count = 0
+            failed_files = []
+            for file_path in file_paths:
+                if file_path not in self.file_items:
+                    file_item = FileItem(file_path)
+                    if file_item.load_content():
+                        self.file_items[file_path] = file_item
+                        self._add_file_to_table(file_item)
+                        loaded_count += 1
+                    else:
+                        failed_files.append(file_item.file_name)
+            
+            if failed_files:
+                max_display = 10
+                if len(failed_files) > max_display:
+                    displayed_files = "\n".join(failed_files[:max_display])
+                    remaining = len(failed_files) - max_display
+                    file_list = f"{displayed_files}\n...and {remaining} more file(s)"
+                else:
+                    file_list = "\n".join(failed_files)
+                QMessageBox.warning(self, "Load Errors", 
+                                   f"Failed to load {len(failed_files)} file(s):\n{file_list}")
+            
+            if loaded_count > 0:
+                self.status_label.setText(f"Loaded {loaded_count} file(s)")
+                self.convert_btn.setEnabled(True)
+            else:
+                self.status_label.setText("No new files loaded")
     
-    def save_translation(self):
-        """Save the translation (final_translation) to a file"""
-        if not self.last_result or not self.last_result.get("final_translation", "").strip():
-            QMessageBox.warning(self, "No Translation", 
-                              "No translation to save. Please convert text first.")
+    def _add_file_to_table(self, file_item):
+        """Add a file item to the table with a checkbox"""
+        row = self.file_table.rowCount()
+        self.file_table.insertRow(row)
+        
+        # Filename column with checkbox
+        filename_item = QTableWidgetItem(file_item.file_name)
+        filename_item.setCheckState(Qt.Checked)  # Default to checked
+        filename_item.setData(Qt.UserRole, file_item.file_path)  # Store file path as data
+        self.file_table.setItem(row, 0, filename_item)
+        
+        # Converted column - initially empty
+        converted_item = QTableWidgetItem("")
+        converted_item.setTextAlignment(Qt.AlignCenter)
+        converted_item.setFlags(converted_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
+        self.file_table.setItem(row, 1, converted_item)
+        
+        # Update button states after adding a file
+        self._update_selection_button_states()
+    
+    def _update_selection_button_states(self):
+        """Update the enabled state of selection buttons based on available files"""
+        has_converted = False
+        has_unconverted = False
+        
+        for file_path, file_item in self.file_items.items():
+            if file_item.is_converted:
+                has_converted = True
+            else:
+                has_unconverted = True
+            
+            # Early exit if both states found
+            if has_converted and has_unconverted:
+                break
+        
+        self.select_converted_btn.setEnabled(has_converted)
+        self.select_unconverted_btn.setEnabled(has_unconverted)
+    
+    def select_all_converted(self):
+        """Select all files that have been converted"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    file_item = self.file_items[file_path]
+                    if file_item.is_converted:
+                        filename_item.setCheckState(Qt.Checked)
+                    else:
+                        filename_item.setCheckState(Qt.Unchecked)
+        
+        self.status_label.setText("Selected all converted files")
+    
+    def select_all_unconverted(self):
+        """Select all files that have not been converted"""
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    file_item = self.file_items[file_path]
+                    if not file_item.is_converted:
+                        filename_item.setCheckState(Qt.Checked)
+                    else:
+                        filename_item.setCheckState(Qt.Unchecked)
+        
+        self.status_label.setText("Selected all unconverted files")
+    
+    def on_file_selected(self, row, column):
+        """Handle file selection from the table"""
+        filename_item = self.file_table.item(row, 0)
+        if filename_item:
+            file_path = filename_item.data(Qt.UserRole)
+            if file_path in self.file_items:
+                self.current_file_item = self.file_items[file_path]
+                self._display_file_content(self.current_file_item)
+                self._update_save_button_state()
+    
+    def _update_save_button_state(self):
+        """Enable save button only if current file or any checked file is successfully converted (no errors)"""
+        enable = False
+        # Check if current file is successfully converted (no errors)
+        if self.current_file_item and self.current_file_item.is_converted and not self.current_file_item.has_error:
+            enable = True
+        else:
+            # Check if any checked file is successfully converted (no errors)
+            for row in range(self.file_table.rowCount()):
+                filename_item = self.file_table.item(row, 0)
+                if filename_item and filename_item.checkState() == Qt.Checked:
+                    file_path = filename_item.data(Qt.UserRole)
+                    file_item = self.file_items.get(file_path)
+                    if file_item and file_item.is_converted and not file_item.has_error:
+                        enable = True
+                        break
+        self.save_btn.setEnabled(enable)
+    def _display_file_content(self, file_item):
+        """Display the content of the selected file in the right pane"""
+        # Always show input text
+        self.input_text.setPlainText(file_item.input_text)
+        
+        # Show conversion results if available
+        if file_item.is_converted and file_item.conversion_result:
+            result = file_item.conversion_result
+            
+            if result.get("error"):
+                self.epidoc_text.setPlainText(f"Error: {result['error']}")
+                self.notes_text.setPlainText("")
+                self.analysis_text.setPlainText("")
+                self.full_output_text.setPlainText(result.get("full_text", ""))
+            elif result.get("has_tags"):
+                self.epidoc_text.setPlainText(result.get("final_translation", ""))
+                self.notes_text.setPlainText(result.get("notes", ""))
+                self.analysis_text.setPlainText(result.get("analysis", ""))
+                self.full_output_text.setPlainText(result.get("full_text", ""))
+            else:
+                self.epidoc_text.setPlainText("")
+                self.notes_text.setPlainText("")
+                self.analysis_text.setPlainText("")
+                self.full_output_text.setPlainText(result.get("full_text", ""))
+                # Only show warning once per file
+                if not result.get("error") and file_item.file_path not in self.missing_tags_warned:
+                    QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
+                    self.missing_tags_warned.add(file_item.file_path)
+        else:
+            # Not yet converted
+            self.epidoc_text.setPlainText("")
+            self.notes_text.setPlainText("")
+            self.analysis_text.setPlainText("")
+            self.full_output_text.setPlainText("")
+    
+    def convert_selected(self):
+        """Convert all selected files"""
+        # Guard against starting a new conversion while one is already running
+        if self.conversion_thread and self.conversion_thread.isRunning():
             return
         
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Translation", 
-            os.path.join(self.converter.save_location, "epidoc_translation.xml"),
-            "XML Files (*.xml);;All Files (*)")
+        selected_items = []
+        selected_file_paths = []
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.checkState() == Qt.Checked:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    selected_items.append(self.file_items[file_path])
+                    selected_file_paths.append(file_path)
         
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(self.last_result["final_translation"])
-                self.status_label.setText(f"Saved translation to: {file_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
-                self.status_label.setText(f"Error saving file: {str(e)}")
-    
-    def save_output(self):
-        """Save the full output to a file (legacy method kept for compatibility)"""
-        if not self.last_result:
-            QMessageBox.warning(self, "No Output", 
-                              "No output to save. Please convert text first.")
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", 
+                              "Please select at least one file to convert.")
             return
         
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Full Output", 
-            os.path.join(self.converter.save_location, "epidoc_output.txt"),
-            "Text Files (*.txt);;All Files (*)")
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(self.last_result.get("full_text", ""))
-                self.status_label.setText(f"Saved output to: {file_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
-                self.status_label.setText(f"Error saving file: {str(e)}")
-    
-    def save_content_dialog(self):
-        """Show the save content dialog with radio button selection"""
-        if not self.last_result:
-            QMessageBox.warning(self, "No Content", 
-                              "No content to save. Please convert text first.")
-            return
-        
-        # Get the current tab index
-        current_tab = self.tab_bar.currentIndex()
-        
-        # Show the dialog
-        dialog = SaveContentDialog(self, self.converter, self.last_result, current_tab)
-        dialog.exec()
-    
-    def _clear_output_widgets(self):
-        """Clear all output text widgets"""
-        self.translation_text.setPlainText("")
-        self.notes_text.setPlainText("")
-        self.analysis_text.setPlainText("")
-    
-    def _set_converting_message(self):
-        """Set converting message in all output widgets"""
-        self.translation_text.setPlainText(self.CONVERTING_MESSAGE)
-        self.notes_text.setPlainText(self.CONVERTING_MESSAGE)
-        self.analysis_text.setPlainText(self.CONVERTING_MESSAGE)
-        self.full_results_text.setPlainText(self.CONVERTING_MESSAGE)
-    
-    def convert_text(self):
-        leiden_text = self.input_text.toPlainText()
-        
-        if not leiden_text:
-            QMessageBox.warning(self, "No Input", 
-                              "Please enter or load Leiden text first.")
-            return
+        # Set all selected files to "Queued" status
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) in selected_file_paths:
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    converted_item.setText("Queued")
         
         # Show status about custom prompts
         custom_status = []
@@ -955,51 +1007,331 @@ class LeidenEpiDocGUI(QMainWindow):
             custom_status.append("custom examples")
         
         if custom_status:
-            status_msg = f"Converting with {' and '.join(custom_status)}..."
+            status_msg = f"Converting {len(selected_items)} file(s) with {' and '.join(custom_status)}..."
         else:
-            status_msg = "Converting with default prompt and examples..."
+            status_msg = f"Converting {len(selected_items)} file(s)..."
         
         self.status_label.setText(status_msg)
-        self._set_converting_message()
         self.convert_btn.setEnabled(False)
         
         # Run conversion in separate thread
-        self.conversion_thread = ConversionThread(self.converter, leiden_text)
+        self.conversion_thread = ConversionThread(self.converter, selected_items)
+        self.conversion_thread.progress.connect(self.conversion_progress)
+        self.conversion_thread.file_started.connect(self.on_file_conversion_started)
+        self.conversion_thread.file_completed.connect(self.on_file_conversion_completed)
         self.conversion_thread.finished.connect(self.conversion_finished)
         self.conversion_thread.start()
     
-    def conversion_finished(self, result):
-        """Handle the conversion result and update the UI"""
-        self.last_result = result
-        self.converter.last_output = result.get("full_text", "")
+    def conversion_progress(self, current, total):
+        """Handle conversion progress updates"""
+        self.status_label.setText(f"Converting file {current} of {total}...")
+    
+    def on_file_conversion_started(self, file_path):
+        """Update table to show 'In Progress' for the file being converted"""
+        # Clear warning tracking for this file so user gets warned again if re-conversion also has missing tags
+        self.missing_tags_warned.discard(file_path)
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) == file_path:
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    converted_item.setText("In Progress")
+                break
+    
+    def on_file_conversion_completed(self, file_path, result):
+        """Update FileItem with conversion result and update table UI
         
-        # Check if there was an error
-        if result.get("error"):
-            self._clear_output_widgets()
-            self.full_results_text.setPlainText(result["error"])
-            self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
-            self.status_label.setText("Conversion failed. Check the Full Results tab for details.")
-            self.convert_btn.setEnabled(True)
+        This method is called from the main/GUI thread via signal, ensuring
+        thread-safe updates to the FileItem objects.
+        """
+        # Update the FileItem with the conversion result in the GUI thread
+        if file_path in self.file_items:
+            file_item = self.file_items[file_path]
+            file_item.conversion_result = result
+            file_item.is_converted = True
+            file_item.has_error = bool(result.get("error"))
+        else:
+            logger.warning(f"Conversion completed for unknown file: {file_path}")
             return
         
-        # Check if the response has the required tags
-        if result["has_tags"]:
-            # Display parsed sections
-            self.translation_text.setPlainText(result["final_translation"])
-            self.notes_text.setPlainText(result["notes"])
-            self.analysis_text.setPlainText(result["analysis"])
-            self.full_results_text.setPlainText(result["full_text"])
-            self.status_label.setText("Conversion complete!")
-        else:
-            # Missing tags - display warning and show full results
-            QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
-            
-            self._clear_output_widgets()
-            self.full_results_text.setPlainText(result["full_text"])
-            self.tabs.setCurrentIndex(2)  # Switch to "Full Results" tab
-            self.status_label.setText("Warning: Missing tags. See Full Results tab.")
+        # Update the table UI
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.data(Qt.UserRole) == file_path:
+                # Update converted column to show checkmark or error indicator
+                converted_item = self.file_table.item(row, 1)
+                if converted_item:
+                    if file_item.has_error:
+                        converted_item.setText("✗ Error")
+                    else:
+                        converted_item.setText("✓ Converted")
+                # Uncheck the file
+                filename_item.setCheckState(Qt.Unchecked)
+                break
         
+        # Update save button state since a file was just converted
+        self._update_save_button_state()
+    
+    def conversion_finished(self, result):
+        """Handle batch conversion completion"""
         self.convert_btn.setEnabled(True)
+        self.conversion_thread = None
+        
+        if result.get("success"):
+            count = result.get("converted_count", 0)
+            self.status_label.setText(f"Successfully converted {count} file(s)")
+            
+            # Refresh the display if a file is currently selected
+            if self.current_file_item:
+                self._display_file_content(self.current_file_item)
+        else:
+            errors = result.get("errors", [])
+            # converted_count represents total files attempted (not just successful)
+            total_attempted = result.get("converted_count", 0)
+            failed_count = len(errors)
+            success_count = total_attempted - failed_count
+            
+            # Update status label with summary
+            self.status_label.setText(
+                f"Conversion completed with errors: {success_count} succeeded, {failed_count} failed"
+            )
+            
+            # Show dialog with error details
+            if errors:
+                # Limit to first 10 errors to avoid extremely long dialogs
+                errors_to_show = errors[:10] if len(errors) > 10 else errors
+                error_details = "\n\n".join(
+                    f"• {filename}:\n  {error}" for filename, error in errors_to_show
+                )
+                if len(errors) > 10:
+                    error_details += f"\n\n... and {len(errors) - 10} more error(s)"
+                
+                QMessageBox.warning(
+                    self,
+                    "Conversion Errors",
+                    f"The following {failed_count} file(s) failed to convert:\n\n{error_details}"
+                )
+            
+            # Refresh the display if a file is currently selected
+            if self.current_file_item:
+                self._display_file_content(self.current_file_item)
+        
+        # Update selection button states after conversion
+        self._update_selection_button_states()
+    
+    def save_output(self):
+        """Save the output for all checked files based on the currently selected tab.
+        
+        If no files are checked, falls back to saving the currently selected file if it is converted.
+        The content saved depends on which tab is currently active (Input, EpiDoc, Notes, Analysis, or Full Output).
+        """
+        # Get all checked files, categorized by conversion state
+        checked_files = []
+        unconverted_files = []
+        error_files = []
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 0)
+            if filename_item and filename_item.checkState() == Qt.Checked:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    file_item = self.file_items[file_path]
+                    if file_item.is_converted:
+                        if file_item.has_error:
+                            error_files.append(file_item)
+                        else:
+                            checked_files.append(file_item)
+                    else:
+                        unconverted_files.append(file_item)
+        
+        # If nothing is checked, fall back to current file
+        if not checked_files and not unconverted_files and not error_files:
+            if self.current_file_item and self.current_file_item.is_converted:
+                if self.current_file_item.has_error:
+                    QMessageBox.warning(
+                        self,
+                        "Conversion Error",
+                        "The current file had a conversion error and cannot be saved."
+                    )
+                    return
+                checked_files = [self.current_file_item]
+            else:
+                QMessageBox.warning(
+                    self,
+                    "No Output",
+                    "No converted files to save. Please convert and check files first, or select a converted file."
+                )
+                return
+        
+        # Build warning message for files that will be skipped
+        skipped_messages = []
+        
+        # Warn about unconverted files
+        if unconverted_files:
+            max_display = 10
+            if len(unconverted_files) > max_display:
+                displayed_files = "\n".join([f.file_name for f in unconverted_files[:max_display]])
+                remaining = len(unconverted_files) - max_display
+                unconverted_names = f"{displayed_files}\n...and {remaining} more file(s)"
+            else:
+                unconverted_names = ", ".join([f.file_name for f in unconverted_files])
+            skipped_messages.append(f"Not converted: {unconverted_names}")
+        
+        # Warn about files with errors
+        if error_files:
+            max_display = 10
+            if len(error_files) > max_display:
+                error_names = ", ".join([f.file_name for f in error_files[:max_display]]) + f"... and {len(error_files) - max_display} more"
+            else:
+                error_names = ", ".join([f.file_name for f in error_files])
+            skipped_messages.append(f"Conversion errors: {error_names}")
+        
+        # Show warning if there are files to skip
+        if skipped_messages:
+            skip_message = "\n\n".join(skipped_messages)
+            if checked_files:
+                reply = QMessageBox.warning(
+                    self, "Some Files Cannot Be Saved",
+                    f"The following files will be skipped:\n\n{skip_message}\n\n"
+                    f"Do you want to continue saving the {len(checked_files)} successfully converted file(s)?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.No:
+                    return
+            else:
+                QMessageBox.warning(self, "No Files to Save", 
+                                  f"None of the selected files can be saved:\n\n{skip_message}\n\n"
+                                  "Please convert the files successfully before saving.")
+                return
+        
+        # Determine what to save based on current tab
+        current_tab = self.tab_widget.currentIndex()
+        
+        # Single file - use file dialog
+        if len(checked_files) == 1:
+            self._save_single_file(checked_files[0], current_tab)
+        else:
+            # Multiple files - use directory picker and auto-name files
+            self._save_multiple_files(checked_files, current_tab)
+    
+    def _get_output_info_for_tab(self, file_item, tab_index):
+        """Get the content, default filename, and extension based on tab index"""
+        result = file_item.conversion_result
+        base_name = os.path.splitext(file_item.file_name)[0]
+        original_ext = os.path.splitext(file_item.file_name)[1] or ".txt"
+        
+        if tab_index == self.TAB_INPUT:
+            return (file_item.input_text, file_item.file_name, original_ext)
+        
+        # Define tab-specific output info (key, filename_suffix, extension)
+        tab_info = {
+            self.TAB_EPIDOC: ("final_translation", "_epidoc.xml", ".xml"),
+            self.TAB_NOTES: ("notes", "_notes.txt", ".txt"),
+            self.TAB_ANALYSIS: ("analysis", "_analysis.txt", ".txt"),
+        }
+        
+        # Get tab-specific info, default to Full Output
+        key, suffix, ext = tab_info.get(tab_index, ("full_text", "_full.txt", ".txt"))
+        
+        # Defensive check: return empty content if result is None
+        if result is None:
+            if getattr(file_item, "is_converted", False):
+                logger.warning(f"File {getattr(file_item, 'file_path', file_item.file_name)} marked as converted but has no conversion_result")
+            return ("", f"{base_name}{suffix}", ext)
+        
+        return (result.get(key, ""), f"{base_name}{suffix}", ext)
+    
+    def _save_single_file(self, file_item, tab_index):
+        """Save a single file with a file dialog"""
+        content, default_name, ext = self._get_output_info_for_tab(file_item, tab_index)
+        
+        if ext == ".xml":
+            file_filter = "XML Files (*.xml);;All Files (*)"
+        else:
+            file_filter = "Text Files (*.txt);;All Files (*)"
+        
+        if not content.strip():
+            QMessageBox.warning(self, "No Content", 
+                              "No content to save for this tab.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Output", 
+            os.path.join(self.converter.save_location, default_name),
+            file_filter)
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.status_label.setText(f"Saved to: {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error saving file: {str(e)}")
+                self.status_label.setText(f"Error saving file: {str(e)}")
+    
+    def _save_multiple_files(self, file_items, tab_index):
+        """Save multiple files to a directory with auto-generated names"""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Directory to Save Files", 
+            self.converter.save_location)
+        
+        if not directory:
+            return
+        
+        saved_count = 0
+        error_count = 0
+        skipped_files = []  # Track skipped file names for user feedback
+        used_names = set()  # Track used names to avoid collisions
+        
+        for file_item in file_items:
+            content, default_name, _ = self._get_output_info_for_tab(file_item, tab_index)
+            
+            if not content.strip():
+                skipped_files.append(file_item.file_name)
+                continue
+            
+            # Handle file name collisions (in batch and on disk)
+            final_name = default_name
+            base, ext = os.path.splitext(default_name)
+            counter = 1
+            file_path = os.path.join(directory, final_name)
+            while final_name in used_names or os.path.exists(file_path):
+                final_name = f"{base}_{counter}{ext}"
+                file_path = os.path.join(directory, final_name)
+                counter += 1
+            used_names.add(final_name)
+            # file_path is already set above
+            
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                saved_count += 1
+            except Exception as e:
+                logger.error(f"Error saving {final_name}: {str(e)}")
+                error_count += 1
+        
+        # Format skipped files message if any
+        skipped_count = len(skipped_files)
+        skipped_msg = ""
+        if skipped_files:
+            max_display = 10
+            if len(skipped_files) > max_display:
+                skipped_names = ", ".join(skipped_files[:max_display]) + f"... and {len(skipped_files) - max_display} more"
+            else:
+                skipped_names = ", ".join(skipped_files)
+            skipped_msg = f"\n\nSkipped (no content): {skipped_names}"
+        
+        # Show summary
+        if error_count > 0:
+            self.status_label.setText(f"Saved {saved_count} file(s), {error_count} error(s), {skipped_count} skipped")
+            QMessageBox.warning(self, "Save Complete", 
+                              f"Saved {saved_count} file(s) to {directory}\n"
+                              f"{error_count} file(s) had errors"
+                              f"{skipped_msg}")
+        else:
+            self.status_label.setText(f"Saved {saved_count} file(s) to {directory}")
+            if skipped_count > 0:
+                QMessageBox.information(self, "Save Complete", 
+                                      f"Saved {saved_count} file(s) to {directory}"
+                                      f"{skipped_msg}")
     
     def show_api_settings(self):
         dialog = APISettingsDialog(self, self.converter)
