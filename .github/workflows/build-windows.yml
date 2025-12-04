@@ -34,12 +34,10 @@ jobs:
       - name: Build with Nuitka
         run: |
           uv run python -m nuitka `
-            --standalone `
             --onefile `
             --enable-plugin=pyside6 `
             --windows-console-mode=disable `
             --output-filename=LeidenToEpiDoc.exe `
-            --include-data-files=leiden_prompts.py=leiden_prompts.py `
             leiden-epidoc.py
 
       - name: Upload artifact
