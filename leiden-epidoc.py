@@ -1142,9 +1142,9 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Define tab-specific output info (key, filename_suffix, extension)
         tab_info = {
-            1: ("final_translation", "_epidoc.xml", ".xml"),  # EpiDoc
-            2: ("notes", "_notes.txt", ".txt"),               # Notes
-            3: ("analysis", "_analysis.txt", ".txt"),         # Analysis
+            self.TAB_EPIDOC: ("final_translation", "_epidoc.xml", ".xml"),  # EpiDoc
+            self.TAB_NOTES: ("notes", "_notes.txt", ".txt"),               # Notes
+            self.TAB_ANALYSIS: ("analysis", "_analysis.txt", ".txt"),         # Analysis
         }
         
         # Get tab-specific info, default to Full Output
