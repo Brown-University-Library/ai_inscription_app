@@ -40,14 +40,14 @@ class FileItem:
     """
     
     def __init__(self, file_path: str):
-        self.file_path = file_path
-        self.file_name = os.path.basename(file_path)
-        self.input_text = ""
-        self.conversion_result = None
-        self.is_converted = False
+        self.file_path: str = file_path
+        self.file_name: str = os.path.basename(file_path)
+        self.input_text: str = ""
+        self.conversion_result: dict | None = None
+        self.is_converted: bool = False
         self.has_error = False  # Track if conversion failed
         
-    def load_content(self):
+    def load_content(self) -> bool:
         """Load the file content"""
         try:
             with open(self.file_path, 'r', encoding='utf-8') as f:
