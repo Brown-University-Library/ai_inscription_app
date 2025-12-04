@@ -1066,9 +1066,10 @@ class LeidenEpiDocGUI(QMainWindow):
                 self._display_file_content(self.current_file_item)
         else:
             errors = result.get("errors", [])
-            total_count = result.get("converted_count", 0)
+            # converted_count represents total files attempted (not just successful)
+            total_attempted = result.get("converted_count", 0)
             failed_count = len(errors)
-            success_count = total_count - failed_count
+            success_count = total_attempted - failed_count
             
             # Update status label with summary
             self.status_label.setText(
@@ -1077,15 +1078,12 @@ class LeidenEpiDocGUI(QMainWindow):
             
             # Show dialog with error details
             if errors:
+                # Limit to first 10 errors to avoid extremely long dialogs
+                errors_to_show = errors[:10] if len(errors) > 10 else errors
                 error_details = "\n\n".join(
-                    f"• {filename}:\n  {error}" for filename, error in errors
+                    f"• {filename}:\n  {error}" for filename, error in errors_to_show
                 )
-                # Limit the display to avoid extremely long dialogs
                 if len(errors) > 10:
-                    shown_errors = errors[:10]
-                    error_details = "\n\n".join(
-                        f"• {filename}:\n  {error}" for filename, error in shown_errors
-                    )
                     error_details += f"\n\n... and {len(errors) - 10} more error(s)"
                 
                 QMessageBox.warning(
