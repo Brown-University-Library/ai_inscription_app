@@ -961,6 +961,10 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def convert_selected(self):
         """Convert all selected files"""
+        # Guard against starting a new conversion while one is already running
+        if self.conversion_thread and self.conversion_thread.isRunning():
+            return
+        
         selected_items = []
         selected_file_paths = []
         for row in range(self.file_table.rowCount()):
