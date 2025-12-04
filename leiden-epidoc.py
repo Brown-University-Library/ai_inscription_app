@@ -1152,6 +1152,8 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Defensive check: return empty content if result is None
         if result is None:
+            if getattr(file_item, "is_converted", False):
+                logger.warning(f"File {getattr(file_item, 'file_path', file_item.file_name)} marked as converted but has no conversion_result")
             return ("", f"{base_name}{suffix}", ext)
         
         return (result.get(key, ""), f"{base_name}{suffix}", ext)
