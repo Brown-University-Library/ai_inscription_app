@@ -40,6 +40,7 @@ jobs:
             --onefile `
             --enable-plugin=pyside6 `
             --windows-console-mode=disable `
+            --assume-yes-for-downloads `
             --output-filename=LeidenToEpiDoc.exe `
             leiden-epidoc.py
 
