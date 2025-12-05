@@ -11,3 +11,9 @@ wheels/
 
 # Config files
 leiden_epidoc_config.json
+
+# Nuitka build artifacts
+*.build/
+*.dist/
+*.onefile-build/
+*.exe
