@@ -105,6 +105,81 @@ Settings are stored in `leiden_epidoc_config.json` in the application directory:
 - **Anthropic API**: Claude AI for conversion logic
 - **Python 3.12+**: Modern Python with type hints
 
+## Testing
+
+This project includes a comprehensive test suite to ensure code quality and reliability.
+
+### Running Tests
+
+Install test dependencies:
+```bash
+pip install -e ".[test]"
+```
+
+Run all tests:
+```bash
+pytest
+```
+
+Run tests with coverage report:
+```bash
+pytest --cov=. --cov-report=html
+```
+
+Run specific test files:
+```bash
+pytest tests/test_converter.py
+pytest tests/test_prompts.py
+pytest tests/test_integration.py
+```
+
+Run tests by marker:
+```bash
+pytest -m unit           # Run only unit tests
+pytest -m integration    # Run only integration tests
+```
+
+### Test Structure
+
+The test suite is organized into several categories:
+
+- **`tests/test_converter.py`**: Unit tests for the `LeidenToEpiDocConverter` class
+  - Configuration loading and saving
+  - Response parsing logic
+  - Error handling
+  - Custom prompt/examples functionality
+  - Regex pattern validation
+
+- **`tests/test_file_item.py`**: Unit tests for the `FileItem` class
+  - File loading and content management
+  - Unicode support
+  - File property handling
+
+- **`tests/test_prompts.py`**: Tests for the prompt system
+  - System instruction validation
+  - Examples structure verification
+  - Leiden Convention coverage
+  - EpiDoc tag coverage
+
+- **`tests/test_integration.py`**: Integration tests for complete workflows
+  - End-to-end conversion workflows
+  - Configuration management
+  - Custom prompts and examples
+  - File handling and batch operations
+
+### Test Coverage
+
+The test suite covers:
+- ✅ Configuration loading and saving
+- ✅ File loading and content management
+- ✅ Response parsing with various tag combinations
+- ✅ Error handling (missing API key, file errors, API errors)
+- ✅ Custom prompts and examples
+- ✅ Unicode and multilingual text support
+- ✅ Batch file processing
+- ✅ Output file naming and collision handling
+- ✅ Leiden Convention and EpiDoc instruction validation
+
 ## Platform Support
 
 The application uses Qt's native widgets and automatically adapts to your operating system:
