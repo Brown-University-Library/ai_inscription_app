@@ -33,7 +33,7 @@ class TestLeidenPrompts:
         assert "<instruction>" in SYSTEM_INSTRUCTION
         
         # Check for key concepts
-        assert "Leiden Convention" in SYSTEM_INSTRUCTION or "Leiden convention" in SYSTEM_INSTRUCTION.lower()
+        assert "leiden convention" in SYSTEM_INSTRUCTION.lower()
         assert "EpiDoc" in SYSTEM_INSTRUCTION
         assert "XML" in SYSTEM_INSTRUCTION
     
@@ -119,7 +119,8 @@ class TestLeidenPrompts:
         assert "IMPORTANT" in SYSTEM_INSTRUCTION or "Important" in SYSTEM_INSTRUCTION
         
         # Check for guidance about spaces in tags
-        assert "space" in SYSTEM_INSTRUCTION.lower() or "whitespace" in SYSTEM_INSTRUCTION.lower()
+        lower_instruction = SYSTEM_INSTRUCTION.lower()
+        assert "space" in lower_instruction or "whitespace" in lower_instruction
     
     def test_system_instruction_unicode_support(self):
         """Test that instruction mentions or shows Unicode/multilingual support."""
@@ -139,9 +140,10 @@ class TestLeidenPrompts:
     def test_system_instruction_response_format_complete(self):
         """Test that response format instructions are complete."""
         # All three required sections should be documented
-        assert "analysis" in SYSTEM_INSTRUCTION.lower()
-        assert "notes" in SYSTEM_INSTRUCTION.lower()
-        assert "final_translation" in SYSTEM_INSTRUCTION.lower() or "translation" in SYSTEM_INSTRUCTION.lower()
+        lower_instruction = SYSTEM_INSTRUCTION.lower()
+        assert "analysis" in lower_instruction
+        assert "notes" in lower_instruction
+        assert "final_translation" in lower_instruction or "translation" in lower_instruction
     
     def test_constants_are_strings(self):
         """Test that both constants are strings."""

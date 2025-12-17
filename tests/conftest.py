@@ -94,3 +94,38 @@ Test notes
 </final_translation>"""
     mock_response.content = [mock_content]
     return mock_response
+
+
+def create_mock_converter():
+    """Create a mock converter for testing response parsing."""
+    import re
+    
+    class MockConverter:
+        """Mock converter that mimics LeidenToEpiDocConverter's _parse_response method."""
+        ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
+        NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
+        TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
+        
+        def _parse_response(self, response_text: str) -> dict:
+            result = {
+                "full_text": response_text,
+                "has_tags": False,
+                "analysis": "",
+                "notes": "",
+                "final_translation": "",
+                "error": None
+            }
+            
+            analysis_match = self.ANALYSIS_PATTERN.search(response_text)
+            notes_match = self.NOTES_PATTERN.search(response_text)
+            translation_match = self.TRANSLATION_PATTERN.search(response_text)
+            
+            if analysis_match and notes_match and translation_match:
+                result["has_tags"] = True
+                result["analysis"] = analysis_match.group(1).strip()
+                result["notes"] = notes_match.group(1).strip()
+                result["final_translation"] = translation_match.group(1).strip()
+            
+            return result
+    
+    return MockConverter()

@@ -103,43 +103,9 @@ class TestLeidenToEpiDocConverter:
     
     def test_parse_response_with_all_tags(self, sample_epidoc_response):
         """Test parsing response with all expected tags."""
-        # Import the converter class with mocked Qt
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "leiden_epidoc", 
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "leiden-epidoc.py")
-        )
-        module = importlib.util.module_from_spec(spec)
+        from tests.conftest import create_mock_converter
         
-        # Create a mock converter to test _parse_response
-        class MockConverter:
-            ANALYSIS_PATTERN = __import__('re').compile(r'<analysis>(.*?)</analysis>', __import__('re').DOTALL | __import__('re').IGNORECASE)
-            NOTES_PATTERN = __import__('re').compile(r'<notes>(.*?)</notes>', __import__('re').DOTALL | __import__('re').IGNORECASE)
-            TRANSLATION_PATTERN = __import__('re').compile(r'<final_translation>(.*?)</final_translation>', __import__('re').DOTALL | __import__('re').IGNORECASE)
-            
-            def _parse_response(self, response_text: str) -> dict:
-                result = {
-                    "full_text": response_text,
-                    "has_tags": False,
-                    "analysis": "",
-                    "notes": "",
-                    "final_translation": "",
-                    "error": None
-                }
-                
-                analysis_match = self.ANALYSIS_PATTERN.search(response_text)
-                notes_match = self.NOTES_PATTERN.search(response_text)
-                translation_match = self.TRANSLATION_PATTERN.search(response_text)
-                
-                if analysis_match and notes_match and translation_match:
-                    result["has_tags"] = True
-                    result["analysis"] = analysis_match.group(1).strip()
-                    result["notes"] = notes_match.group(1).strip()
-                    result["final_translation"] = translation_match.group(1).strip()
-                
-                return result
-        
-        converter = MockConverter()
+        converter = create_mock_converter()
         result = converter._parse_response(sample_epidoc_response)
         
         assert result["has_tags"] is True
@@ -150,36 +116,9 @@ class TestLeidenToEpiDocConverter:
     
     def test_parse_response_missing_tags(self, sample_epidoc_response_no_tags):
         """Test parsing response without expected tags."""
-        import re
+        from tests.conftest import create_mock_converter
         
-        class MockConverter:
-            ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
-            NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
-            TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
-            
-            def _parse_response(self, response_text: str) -> dict:
-                result = {
-                    "full_text": response_text,
-                    "has_tags": False,
-                    "analysis": "",
-                    "notes": "",
-                    "final_translation": "",
-                    "error": None
-                }
-                
-                analysis_match = self.ANALYSIS_PATTERN.search(response_text)
-                notes_match = self.NOTES_PATTERN.search(response_text)
-                translation_match = self.TRANSLATION_PATTERN.search(response_text)
-                
-                if analysis_match and notes_match and translation_match:
-                    result["has_tags"] = True
-                    result["analysis"] = analysis_match.group(1).strip()
-                    result["notes"] = notes_match.group(1).strip()
-                    result["final_translation"] = translation_match.group(1).strip()
-                
-                return result
-        
-        converter = MockConverter()
+        converter = create_mock_converter()
         result = converter._parse_response(sample_epidoc_response_no_tags)
         
         assert result["has_tags"] is False
@@ -190,39 +129,12 @@ class TestLeidenToEpiDocConverter:
     
     def test_parse_response_partial_tags(self):
         """Test parsing response with only some tags present."""
-        import re
-        
-        class MockConverter:
-            ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
-            NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
-            TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
-            
-            def _parse_response(self, response_text: str) -> dict:
-                result = {
-                    "full_text": response_text,
-                    "has_tags": False,
-                    "analysis": "",
-                    "notes": "",
-                    "final_translation": "",
-                    "error": None
-                }
-                
-                analysis_match = self.ANALYSIS_PATTERN.search(response_text)
-                notes_match = self.NOTES_PATTERN.search(response_text)
-                translation_match = self.TRANSLATION_PATTERN.search(response_text)
-                
-                if analysis_match and notes_match and translation_match:
-                    result["has_tags"] = True
-                    result["analysis"] = analysis_match.group(1).strip()
-                    result["notes"] = notes_match.group(1).strip()
-                    result["final_translation"] = translation_match.group(1).strip()
-                
-                return result
+        from tests.conftest import create_mock_converter
         
         partial_response = """<analysis>Test</analysis>
 <notes>Test notes</notes>"""
         
-        converter = MockConverter()
+        converter = create_mock_converter()
         result = converter._parse_response(partial_response)
         
         # Should be False since not all three tags are present
