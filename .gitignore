@@ -17,3 +17,10 @@ leiden_epidoc_config.json
 *.dist/
 *.onefile-build/
 *.exe
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
