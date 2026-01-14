@@ -1,0 +1,66 @@
+name: Build Mac Executable
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --extra build
+
+      - name: Build with Nuitka
+        # Note: Using --standalone with --macos-create-app-bundle to create a proper .app bundle
+        # (macOS convention), unlike Windows which uses --onefile for a single .exe
+        run: |
+          uv run python -m nuitka \
+            --standalone \
+            --macos-create-app-bundle \
+            --enable-plugin=pyside6 \
+            --assume-yes-for-downloads \
+            --output-filename=LeidenToEpiDoc \
+            leiden-epidoc.py
+
+      - name: Create ZIP of app bundle
+        run: |
+          zip -r LeidenToEpiDoc-Mac.zip LeidenToEpiDoc.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LeidenToEpiDoc-Mac
+          path: LeidenToEpiDoc-Mac.zip
+          if-no-files-found: error
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LeidenToEpiDoc-Mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
