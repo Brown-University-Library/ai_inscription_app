@@ -41,6 +41,7 @@ jobs:
           uv run python -m nuitka \
             --standalone \
             --macos-create-app-bundle \
+            --macos-disable-console \
             --enable-plugin=pyside6 \
             --assume-yes-for-downloads \
             --output-filename=LeidenToEpiDoc \
