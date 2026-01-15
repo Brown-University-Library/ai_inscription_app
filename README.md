@@ -16,7 +16,39 @@ This application provides a user-friendly GUI for converting inscriptions writte
 - **Configurable**: Customize API settings and default save locations
 - **Cross-Platform**: Runs on Linux, Windows, and macOS with native appearance
 
-## Installation
+## Quick Start (Pre-built Downloads)
+
+Pre-built executables are available for Windows and macOS. No Python installation required!
+
+### Download
+
+Download the latest release for your platform from the [Releases page](https://github.com/Brown-University-Library/ai_inscription_app/releases/latest):
+
+| Platform | File | Instructions |
+|----------|------|--------------|
+| **Windows** | `LeidenToEpiDoc.exe` | Download and run directly |
+| **macOS** | `LeidenToEpiDoc-Mac.zip` | Download, unzip, and open the `.app` |
+
+### Windows
+
+1. Download `LeidenToEpiDoc.exe` from the [latest release](https://github.com/Brown-University-Library/ai_inscription_app/releases/latest)
+2. Double-click the downloaded file to run the application
+3. If Windows SmartScreen appears, click **More info** → **Run anyway** (the app is not code-signed)
+4. On first launch, go to **Settings → Configure API** and enter your [Anthropic API key](https://console.anthropic.com/)
+
+### macOS
+
+1. Download `LeidenToEpiDoc-Mac.zip` from the [latest release](https://github.com/Brown-University-Library/ai_inscription_app/releases/latest)
+2. Double-click the ZIP file to extract it (creates `leiden-epidoc.app`)
+3. Right-click the app and select **Open** (required for first launch since the app is not notarized)
+4. If prompted, click **Open** again in the security dialog
+5. On first launch, go to **Settings → Configure API** and enter your [Anthropic API key](https://console.anthropic.com/)
+
+> **Note**: You will need an Anthropic API key to use this application. Get one at [console.anthropic.com](https://console.anthropic.com/).
+
+---
+
+## Installation from Source
 
 ### Prerequisites
 
@@ -199,8 +231,6 @@ Qt automatically handles Unicode text rendering for:
 - Syriac
 - Armenian
 - And many more...
-
-- Batch conversion
 
 ## License
 
