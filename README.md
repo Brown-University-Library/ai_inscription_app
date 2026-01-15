@@ -12,7 +12,6 @@ This application provides a user-friendly GUI for converting inscriptions writte
 - **Native GUI**: Clean, responsive interface built with PySide6/Qt
 - **Unicode Support**: Full support for Greek, Hebrew, Arabic, and other ancient scripts
 - **RTL Languages**: Automatic right-to-left text rendering for Hebrew, Arabic, and Syriac
-- **Non-Blocking Operations**: Conversions run in background threads to keep UI responsive
 - **File Management**: Load Leiden text from files and save EpiDoc XML output
 - **Configurable**: Customize API settings and default save locations
 - **Cross-Platform**: Runs on Linux, Windows, and macOS with native appearance
@@ -201,16 +200,6 @@ Qt automatically handles Unicode text rendering for:
 - Armenian
 - And many more...
 
-## Future Enhancements
-
-Potential improvements:
-- Syntax highlighting for XML output
-- Drag-and-drop file loading
-- Recent files menu
-- Split view for side-by-side comparison
-- Dark mode / custom themes
-- Keyboard shortcuts
-- Undo/redo support
 - Batch conversion
 
 ## License
