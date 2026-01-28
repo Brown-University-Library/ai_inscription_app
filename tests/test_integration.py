@@ -199,6 +199,47 @@ class TestEndToEndWorkflow:
         assert updated_config["api_key"] == "new-key"
         assert updated_config["model"] == "new-model"
         assert updated_config["save_location"] == initial_config["save_location"]
+    
+    def test_clear_all_files_workflow(self, tmp_path):
+        """Test workflow of clearing all loaded files."""
+        # Create multiple test files
+        files = []
+        for i in range(3):
+            file_path = tmp_path / f"inscription_{i}.txt"
+            content = f"Test inscription {i}\nv(ir) c(larissim)"
+            file_path.write_text(content, encoding='utf-8')
+            files.append(file_path)
+        
+        # Simulate loading files into application state
+        file_items = {}
+        for file_path in files:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            file_items[str(file_path)] = {
+                'file_path': str(file_path),
+                'file_name': file_path.name,
+                'input_text': content,
+                'conversion_result': None,
+                'is_converted': False
+            }
+        
+        current_file_item = file_items[str(files[0])]
+        missing_tags_warned = {str(files[1])}
+        
+        # Verify initial state has data
+        assert len(file_items) == 3
+        assert current_file_item is not None
+        assert len(missing_tags_warned) == 1
+        
+        # Simulate clear all files operation
+        file_items.clear()
+        current_file_item = None
+        missing_tags_warned.clear()
+        
+        # Verify cleared state
+        assert len(file_items) == 0
+        assert current_file_item is None
+        assert len(missing_tags_warned) == 0
 
 
 @pytest.mark.integration

@@ -624,10 +624,20 @@ class LeidenEpiDocGUI(QMainWindow):
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Load files button
+        # Load/Clear files buttons row
+        file_btn_layout = QHBoxLayout()
+        file_btn_layout.setSpacing(8)
+        
         load_files_btn = QPushButton("Load Files")
         load_files_btn.clicked.connect(self.load_files)
-        left_layout.addWidget(load_files_btn)
+        file_btn_layout.addWidget(load_files_btn)
+        
+        self.clear_files_btn = QPushButton("Clear All")
+        self.clear_files_btn.clicked.connect(self.clear_all_files)
+        self.clear_files_btn.setEnabled(False)  # Disabled when no files loaded
+        file_btn_layout.addWidget(self.clear_files_btn)
+        
+        left_layout.addLayout(file_btn_layout)
         
         # File table
         files_label = QLabel("Loaded Files:")
@@ -837,6 +847,7 @@ class LeidenEpiDocGUI(QMainWindow):
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
                 self.convert_btn.setEnabled(True)
+                self.clear_files_btn.setEnabled(True)
             else:
                 self.status_label.setText("No new files loaded")
     
@@ -877,6 +888,44 @@ class LeidenEpiDocGUI(QMainWindow):
         
         self.select_converted_btn.setEnabled(has_converted)
         self.select_unconverted_btn.setEnabled(has_unconverted)
+    
+    def clear_all_files(self):
+        """Clear all loaded files and reset application state"""
+        # Don't allow clearing while conversion is in progress
+        if self.conversion_thread and self.conversion_thread.isRunning():
+            QMessageBox.warning(self, "Conversion in Progress",
+                              "Cannot clear files while conversion is in progress. "
+                              "Please wait for the conversion to complete.")
+            return
+        
+        # Clear the file table
+        self.file_table.setRowCount(0)
+        
+        # Clear the file items dictionary
+        self.file_items.clear()
+        
+        # Reset current file item
+        self.current_file_item = None
+        
+        # Clear the missing tags warning tracking
+        self.missing_tags_warned.clear()
+        
+        # Clear all right-hand panes
+        self.input_text.setPlainText("")
+        self.epidoc_text.setPlainText("")
+        self.notes_text.setPlainText("")
+        self.analysis_text.setPlainText("")
+        self.full_output_text.setPlainText("")
+        
+        # Update button states
+        self.convert_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        self.select_converted_btn.setEnabled(False)
+        self.select_unconverted_btn.setEnabled(False)
+        self.clear_files_btn.setEnabled(False)
+        
+        # Update status bar
+        self.status_label.setText("All files cleared")
     
     def select_all_converted(self):
         """Select all files that have been converted"""
