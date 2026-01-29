@@ -958,7 +958,17 @@ class LeidenEpiDocGUI(QMainWindow):
         self.status_label.setText("Selected all unconverted files")
     
     def on_file_selected(self, row, column):
-        """Handle file selection from the table"""
+        """Handle file selection from the table.
+        
+        Clicking on the checkbox column (column 0) only toggles the check state
+        without selecting the document for viewing in the right pane.
+        Clicking elsewhere in the row selects the document for viewing.
+        """
+        # Skip document selection when clicking on the checkbox column
+        # to allow toggling checkboxes without changing the viewed document
+        if column == 0:
+            return
+        
         filename_item = self.file_table.item(row, 0)
         if filename_item:
             file_path = filename_item.data(Qt.UserRole)
