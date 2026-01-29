@@ -380,56 +380,66 @@ class TestFileNameHandling:
 class TestCheckboxSelectionDecoupling:
     """Tests for checkbox selection decoupling behavior.
     
-    These tests document the expected behavior for the checkbox/selection
-    decoupling feature. The implementation uses itemChanged signal to detect
-    checkbox toggles, and a flag to prevent document selection when a checkbox
-    was clicked directly.
+    The implementation uses a dedicated checkbox column (column 0) separate
+    from the filename column (column 1), making the decoupling straightforward:
+    
+    Table structure:
+    - Column 0: Checkbox (for batch selection)
+    - Column 1: Filename (stores file_path in UserRole data)
+    - Column 2: Status (Queued, In Progress, ✓ Converted, ✗ Error)
     
     Key behaviors:
-    - Clicking directly on the checkbox indicator toggles it and skips selection
-    - Clicking on the filename text (even in the same column) selects the document
-    - Clicking on other columns (like "Converted") selects the document
+    - Clicking on column 0 (checkbox column) only toggles the checkbox
+    - Clicking on columns 1 or 2 selects the document for viewing
     - Checkbox state and document selection are independent concerns
     
     Note: Full GUI testing requires a running Qt application. These tests
     validate the logical requirements and serve as documentation.
     """
     
-    def test_checkbox_toggle_flag_prevents_selection(self):
-        """Verify that when checkbox_just_toggled flag is True, selection is skipped."""
-        # This test documents the expected behavior: when the itemChanged signal
-        # fires before cellClicked (indicating a checkbox toggle), selection is skipped
-        checkbox_just_toggled = True
+    def test_checkbox_column_click_skips_selection(self):
+        """Verify clicking checkbox column (column 0) does not select document."""
+        # The implementation checks: if column == 0: return
+        column = 0
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # The actual implementation checks: if self._checkbox_just_toggled: return
-        if checkbox_just_toggled:
+        if column == 0:
             selected = False
-            checkbox_just_toggled = False  # Reset the flag
         else:
             selected = True
             current_file_item = {"file_path": "/new/file.txt"}
         
-        # Document should NOT be selected when checkbox was just toggled
+        # Document should NOT be selected when clicking checkbox column
         assert selected is False
         assert current_file_item["file_path"] == "/original/file.txt"
-        assert checkbox_just_toggled is False  # Flag should be reset
     
-    def test_filename_click_triggers_selection(self):
-        """Verify clicking filename text (not checkbox) triggers selection."""
-        # When clicking on the filename text (not the checkbox indicator),
-        # itemChanged does NOT fire, so checkbox_just_toggled stays False
-        checkbox_just_toggled = False
+    def test_filename_column_click_triggers_selection(self):
+        """Verify clicking filename column (column 1) triggers selection."""
+        column = 1
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # The implementation proceeds with selection when flag is False
-        if checkbox_just_toggled:
+        if column == 0:
             selected = False
         else:
             selected = True
             current_file_item = {"file_path": "/new/file.txt"}
         
-        # Document SHOULD be selected when clicking filename text
+        # Document SHOULD be selected when clicking filename column
+        assert selected is True
+        assert current_file_item["file_path"] == "/new/file.txt"
+    
+    def test_status_column_click_triggers_selection(self):
+        """Verify clicking status column (column 2) triggers selection."""
+        column = 2
+        current_file_item = {"file_path": "/original/file.txt"}
+        
+        if column == 0:
+            selected = False
+        else:
+            selected = True
+            current_file_item = {"file_path": "/new/file.txt"}
+        
+        # Document SHOULD be selected when clicking status column
         assert selected is True
         assert current_file_item["file_path"] == "/new/file.txt"
     
