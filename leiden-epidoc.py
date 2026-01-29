@@ -651,7 +651,10 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.file_table.cellClicked.connect(self.on_file_selected)
+        # Use selectionChanged instead of cellClicked so checkbox clicks don't trigger selection
+        # When clicking a checkbox, Qt toggles it but doesn't change row selection
+        # When clicking elsewhere in the row, Qt changes the row selection
+        self.file_table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         left_layout.addWidget(self.file_table)
         
         # Button area - all action buttons in one place
@@ -966,12 +969,21 @@ class LeidenEpiDocGUI(QMainWindow):
         
         self.status_label.setText("Selected all unconverted files")
     
-    def on_file_selected(self, row, column):
-        """Handle file selection from the table.
+    def on_row_selection_changed(self, selected, deselected):
+        """Handle row selection changes in the table.
         
-        Clicking anywhere in the row selects the document for viewing.
-        The checkbox in column 0 toggles independently when clicked directly.
+        This is triggered when the row selection (highlighting) changes.
+        Clicking on a checkbox toggles it but does NOT change the row selection,
+        so this method won't be called for checkbox clicks.
+        Clicking elsewhere in the row changes the selection and triggers this method.
         """
+        indexes = selected.indexes()
+        if not indexes:
+            return
+        
+        # Get the row from the first selected index
+        row = indexes[0].row()
+        
         # Get file path from column 1 (filename column)
         filename_item = self.file_table.item(row, 1)
         if filename_item:

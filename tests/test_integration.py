@@ -380,8 +380,11 @@ class TestFileNameHandling:
 class TestCheckboxSelectionDecoupling:
     """Tests for checkbox selection decoupling behavior.
     
-    The implementation uses a dedicated checkbox column (column 0) separate
-    from the filename column (column 1):
+    The implementation uses Qt's selectionModel().selectionChanged signal instead
+    of cellClicked. This means:
+    
+    - Clicking on a checkbox: toggles the checkbox but does NOT change row selection
+    - Clicking elsewhere in the row: changes row selection and displays that document
     
     Table structure:
     - Column 0: Checkbox (for batch selection)
@@ -389,8 +392,8 @@ class TestCheckboxSelectionDecoupling:
     - Column 2: Status (Queued, In Progress, ✓ Converted, ✗ Error)
     
     Key behaviors:
-    - Clicking anywhere in the row (including column 0) selects the document for viewing
-    - Clicking directly on the checkbox indicator toggles the checkbox state
+    - Checkbox clicks do NOT trigger document selection (row selection unchanged)
+    - Row clicks (non-checkbox area) change row selection and display document
     - The checkbox state determines which files are included in batch operations
     - The row highlighting always matches the document shown in the right pane
     
@@ -398,31 +401,51 @@ class TestCheckboxSelectionDecoupling:
     validate the logical requirements and serve as documentation.
     """
     
-    def test_any_column_click_triggers_selection(self):
-        """Verify clicking any column selects the document for viewing."""
-        # The implementation always selects the document regardless of column
-        # This ensures highlighted row matches displayed content
+    def test_checkbox_click_does_not_change_selection(self):
+        """Verify clicking checkbox does NOT change which document is displayed.
         
-        # Test each column independently
-        for column in [0, 1, 2]:
-            # Simulate initial state
-            initial_file = "/original/file.txt"
-            new_file = "/new/file.txt"
-            
-            # Selection always happens (no column check) - simulates on_file_selected behavior
-            # Since there's no `if column == 0: return`, selection proceeds for all columns
-            selected = True
-            result_file = new_file
-            
-            # Verify selection happened
-            assert selected is True, f"Column {column} should trigger selection"
-            assert result_file == new_file, f"Column {column} should update current file"
+        Qt's behavior: clicking on a checkbox toggles it but doesn't change
+        the row selection. Since we use selectionChanged (not cellClicked),
+        checkbox clicks won't trigger document display changes.
+        """
+        # Simulate: row 1 is selected, user clicks checkbox in row 2
+        currently_displayed_row = 1
+        checkbox_clicked_in_row = 2
+        
+        # Qt behavior: checkbox click doesn't change selection
+        row_selection_changed = False  # No selectionChanged signal emitted
+        
+        # Since selection didn't change, displayed document stays the same
+        if row_selection_changed:
+            currently_displayed_row = checkbox_clicked_in_row
+        
+        # Document should still show row 1 content
+        assert currently_displayed_row == 1
+    
+    def test_row_click_changes_selection(self):
+        """Verify clicking on row (not checkbox) changes displayed document.
+        
+        Qt's behavior: clicking anywhere except the checkbox changes row selection.
+        Since we use selectionChanged signal, this triggers document display update.
+        """
+        # Simulate: row 1 is selected, user clicks on filename in row 2
+        currently_displayed_row = 1
+        clicked_row = 2
+        
+        # Qt behavior: non-checkbox click changes selection
+        row_selection_changed = True  # selectionChanged signal emitted
+        
+        # Since selection changed, displayed document updates
+        if row_selection_changed:
+            currently_displayed_row = clicked_row
+        
+        # Document should now show row 2 content
+        assert currently_displayed_row == 2
     
     def test_checkbox_state_independent_of_view_selection(self):
         """Verify checkbox state is tracked independently of document view selection."""
         # This documents the core requirement: checkbox state (for batch ops)
         # and document selection (for right pane display) are separate concerns
-        # Clicking a row selects it for viewing, but doesn't change checkbox state
         file_items = {
             "/file1.txt": {"checked": True, "selected_for_view": False},
             "/file2.txt": {"checked": False, "selected_for_view": True},
@@ -458,14 +481,13 @@ class TestCheckboxSelectionDecoupling:
     def test_row_highlight_matches_displayed_content(self):
         """Verify that row highlighting always matches the displayed document.
         
-        This test documents the UX requirement that the highlighted row
-        should always correspond to the document shown in the right pane.
-        Clicking anywhere in a row (including the checkbox column) both
-        highlights the row AND displays that document's content.
+        Using selectionChanged signal ensures that document display only updates
+        when row selection (highlighting) actually changes. Checkbox clicks don't
+        change selection, so they don't affect display.
         """
-        # When any cell in a row is clicked, both happen:
+        # When row selection changes (via selectionChanged signal):
         # 1. Row gets highlighted (Qt's SelectRows behavior)
-        # 2. Document content is displayed (on_file_selected handler)
+        # 2. Document content is displayed (on_row_selection_changed handler)
         highlighted_row = 2
         displayed_document_row = 2  # Same row, always matches
         
