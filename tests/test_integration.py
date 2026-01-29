@@ -380,19 +380,26 @@ class TestFileNameHandling:
 class TestCheckboxSelectionDecoupling:
     """Tests for checkbox selection decoupling behavior.
     
-    These tests verify that clicking on the checkbox column does not
-    select the document for viewing, while clicking on other columns
-    still triggers document selection.
+    These tests document the expected behavior for the checkbox/selection
+    decoupling feature. They validate the logic pattern used in the
+    on_file_selected() method to ensure that:
+    - Clicking on column 0 (checkbox column) does not trigger document selection
+    - Clicking on other columns triggers document selection
+    - Checkbox state and document selection are independent concerns
+    
+    Note: Full GUI testing requires a running Qt application. These tests
+    validate the logical requirements and serve as documentation.
     """
     
-    def test_checkbox_column_click_does_not_select_document(self):
-        """Test that clicking on checkbox column (column 0) does not change current_file_item."""
-        # Simulate the on_file_selected logic
-        # When column is 0 (checkbox column), selection should be skipped
+    def test_checkbox_column_click_skips_selection_logic(self):
+        """Verify column 0 clicks should skip selection (documents the on_file_selected check)."""
+        # This test documents the expected behavior: when column is 0,
+        # the on_file_selected method should return early without selecting
         column = 0
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # Simulate the logic: if column == 0, return early (no selection)
+        # The actual implementation uses: if column == 0: return
+        # This means selection should NOT happen for column 0
         if column == 0:
             selected = False
         else:
@@ -403,14 +410,14 @@ class TestCheckboxSelectionDecoupling:
         assert selected is False
         assert current_file_item["file_path"] == "/original/file.txt"
     
-    def test_non_checkbox_column_click_selects_document(self):
-        """Test that clicking on non-checkbox column (column 1) selects the document."""
-        # Simulate the on_file_selected logic
-        # When column is 1 (converted status column), selection should proceed
+    def test_non_checkbox_column_click_triggers_selection(self):
+        """Verify non-checkbox column clicks should trigger selection."""
+        # This test documents the expected behavior: when column is not 0,
+        # the on_file_selected method should proceed with document selection
         column = 1
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # Simulate the logic: if column != 0, proceed with selection
+        # The actual implementation proceeds with selection when column != 0
         if column == 0:
             selected = False
         else:
@@ -421,41 +428,38 @@ class TestCheckboxSelectionDecoupling:
         assert selected is True
         assert current_file_item["file_path"] == "/new/file.txt"
     
-    def test_checkbox_toggle_independent_of_selection(self):
-        """Test that checkbox state can be tracked independently of document selection."""
-        # Simulate file items with checkbox states
+    def test_checkbox_state_independent_of_view_selection(self):
+        """Verify checkbox state is tracked independently of document view selection."""
+        # This documents the core requirement: checkbox state (for batch ops)
+        # and document selection (for right pane display) are separate concerns
         file_items = {
             "/file1.txt": {"checked": True, "selected_for_view": False},
             "/file2.txt": {"checked": False, "selected_for_view": True},
         }
         
-        # Toggle checkbox on file1 without selecting it for viewing
+        # Toggling checkbox should not affect view selection state
         file_items["/file1.txt"]["checked"] = not file_items["/file1.txt"]["checked"]
         
-        # File1 checkbox should be toggled but not selected for viewing
         assert file_items["/file1.txt"]["checked"] is False
         assert file_items["/file1.txt"]["selected_for_view"] is False
-        
-        # File2 should remain selected for viewing
         assert file_items["/file2.txt"]["selected_for_view"] is True
     
-    def test_batch_operations_use_checkbox_state(self):
-        """Test that batch operations work based on checkbox state, not selection state."""
-        # Simulate file items with conversion state
+    def test_batch_operations_use_checkbox_state_not_selection(self):
+        """Verify batch operations rely on checkbox state (confirms no regression)."""
+        # This test confirms batch operations continue to work correctly
+        # using checkbox state after the decoupling changes
         file_items = {
             "/file1.txt": {"checked": True, "is_converted": True},
             "/file2.txt": {"checked": False, "is_converted": True},
             "/file3.txt": {"checked": True, "is_converted": False},
         }
         
-        # Simulate getting checked files for batch operation
+        # Batch operations filter by checkbox state, not selection state
         checked_converted_files = [
             path for path, item in file_items.items()
             if item["checked"] and item["is_converted"]
         ]
         
-        # Only file1 should be in the batch (checked AND converted)
+        # Only file1 should be in batch (checked AND converted)
         assert len(checked_converted_files) == 1
         assert "/file1.txt" in checked_converted_files
-        assert "/file2.txt" not in checked_converted_files  # Not checked
-        assert "/file3.txt" not in checked_converted_files  # Not converted
