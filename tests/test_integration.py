@@ -381,50 +381,55 @@ class TestCheckboxSelectionDecoupling:
     """Tests for checkbox selection decoupling behavior.
     
     These tests document the expected behavior for the checkbox/selection
-    decoupling feature. They validate the logic pattern used in the
-    on_file_selected() method to ensure that:
-    - Clicking on column 0 (checkbox column) does not trigger document selection
-    - Clicking on other columns triggers document selection
+    decoupling feature. The implementation uses itemChanged signal to detect
+    checkbox toggles, and a flag to prevent document selection when a checkbox
+    was clicked directly.
+    
+    Key behaviors:
+    - Clicking directly on the checkbox indicator toggles it and skips selection
+    - Clicking on the filename text (even in the same column) selects the document
+    - Clicking on other columns (like "Converted") selects the document
     - Checkbox state and document selection are independent concerns
     
     Note: Full GUI testing requires a running Qt application. These tests
     validate the logical requirements and serve as documentation.
     """
     
-    def test_checkbox_column_click_skips_selection_logic(self):
-        """Verify column 0 clicks should skip selection (documents the on_file_selected check)."""
-        # This test documents the expected behavior: when column is 0,
-        # the on_file_selected method should return early without selecting
-        column = 0
+    def test_checkbox_toggle_flag_prevents_selection(self):
+        """Verify that when checkbox_just_toggled flag is True, selection is skipped."""
+        # This test documents the expected behavior: when the itemChanged signal
+        # fires before cellClicked (indicating a checkbox toggle), selection is skipped
+        checkbox_just_toggled = True
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # The actual implementation uses: if column == 0: return
-        # This means selection should NOT happen for column 0
-        if column == 0:
+        # The actual implementation checks: if self._checkbox_just_toggled: return
+        if checkbox_just_toggled:
             selected = False
+            checkbox_just_toggled = False  # Reset the flag
         else:
             selected = True
             current_file_item = {"file_path": "/new/file.txt"}
         
-        # Document should NOT be selected when clicking checkbox column
+        # Document should NOT be selected when checkbox was just toggled
         assert selected is False
         assert current_file_item["file_path"] == "/original/file.txt"
+        assert checkbox_just_toggled is False  # Flag should be reset
     
-    def test_non_checkbox_column_click_triggers_selection(self):
-        """Verify non-checkbox column clicks should trigger selection."""
-        # This test documents the expected behavior: when column is not 0,
-        # the on_file_selected method should proceed with document selection
-        column = 1
+    def test_filename_click_triggers_selection(self):
+        """Verify clicking filename text (not checkbox) triggers selection."""
+        # When clicking on the filename text (not the checkbox indicator),
+        # itemChanged does NOT fire, so checkbox_just_toggled stays False
+        checkbox_just_toggled = False
         current_file_item = {"file_path": "/original/file.txt"}
         
-        # The actual implementation proceeds with selection when column != 0
-        if column == 0:
+        # The implementation proceeds with selection when flag is False
+        if checkbox_just_toggled:
             selected = False
         else:
             selected = True
             current_file_item = {"file_path": "/new/file.txt"}
         
-        # Document SHOULD be selected when clicking non-checkbox column
+        # Document SHOULD be selected when clicking filename text
         assert selected is True
         assert current_file_item["file_path"] == "/new/file.txt"
     

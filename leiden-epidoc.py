@@ -603,6 +603,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_items = {}  # Dictionary mapping file_path to FileItem
         self.current_file_item = None  # Currently selected file
         self.missing_tags_warned = set()  # Track files that have shown the missing tags warning
+        self._checkbox_just_toggled = False  # Flag to track checkbox toggle events
         self.setup_ui()
     
     def setup_ui(self):
@@ -651,6 +652,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.file_table.cellClicked.connect(self.on_file_selected)
+        self.file_table.itemChanged.connect(self._on_item_changed)
         left_layout.addWidget(self.file_table)
         
         # Button area - all action buttons in one place
@@ -858,7 +860,10 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Filename column with checkbox
         filename_item = QTableWidgetItem(file_item.file_name)
+        # Block signals to prevent _on_item_changed from triggering
+        self.file_table.blockSignals(True)
         filename_item.setCheckState(Qt.Checked)  # Default to checked
+        self.file_table.blockSignals(False)
         filename_item.setData(Qt.UserRole, file_item.file_path)  # Store file path as data
         self.file_table.setItem(row, 0, filename_item)
         
@@ -929,44 +934,67 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def select_all_converted(self):
         """Select all files that have been converted"""
-        for row in range(self.file_table.rowCount()):
-            filename_item = self.file_table.item(row, 0)
-            if filename_item:
-                file_path = filename_item.data(Qt.UserRole)
-                if file_path in self.file_items:
-                    file_item = self.file_items[file_path]
-                    if file_item.is_converted:
-                        filename_item.setCheckState(Qt.Checked)
-                    else:
-                        filename_item.setCheckState(Qt.Unchecked)
+        # Block signals to prevent _on_item_changed from triggering
+        self.file_table.blockSignals(True)
+        try:
+            for row in range(self.file_table.rowCount()):
+                filename_item = self.file_table.item(row, 0)
+                if filename_item:
+                    file_path = filename_item.data(Qt.UserRole)
+                    if file_path in self.file_items:
+                        file_item = self.file_items[file_path]
+                        if file_item.is_converted:
+                            filename_item.setCheckState(Qt.Checked)
+                        else:
+                            filename_item.setCheckState(Qt.Unchecked)
+        finally:
+            self.file_table.blockSignals(False)
         
         self.status_label.setText("Selected all converted files")
     
     def select_all_unconverted(self):
         """Select all files that have not been converted"""
-        for row in range(self.file_table.rowCount()):
-            filename_item = self.file_table.item(row, 0)
-            if filename_item:
-                file_path = filename_item.data(Qt.UserRole)
-                if file_path in self.file_items:
-                    file_item = self.file_items[file_path]
-                    if not file_item.is_converted:
-                        filename_item.setCheckState(Qt.Checked)
-                    else:
-                        filename_item.setCheckState(Qt.Unchecked)
+        # Block signals to prevent _on_item_changed from triggering
+        self.file_table.blockSignals(True)
+        try:
+            for row in range(self.file_table.rowCount()):
+                filename_item = self.file_table.item(row, 0)
+                if filename_item:
+                    file_path = filename_item.data(Qt.UserRole)
+                    if file_path in self.file_items:
+                        file_item = self.file_items[file_path]
+                        if not file_item.is_converted:
+                            filename_item.setCheckState(Qt.Checked)
+                        else:
+                            filename_item.setCheckState(Qt.Unchecked)
+        finally:
+            self.file_table.blockSignals(False)
         
         self.status_label.setText("Selected all unconverted files")
+    
+    def _on_item_changed(self, item):
+        """Handle item changes in the file table.
+        
+        This is used to detect when a checkbox is toggled (by clicking directly
+        on the checkbox indicator). Sets a flag that on_file_selected can check
+        to avoid selecting the document when the checkbox was clicked.
+        """
+        # Only track checkbox changes in column 0 (filename column with checkbox)
+        if item.column() == 0:
+            self._checkbox_just_toggled = True
     
     def on_file_selected(self, row, column):
         """Handle file selection from the table.
         
-        Clicking on the checkbox column (column 0) only toggles the check state
+        Clicking directly on the checkbox indicator toggles the check state
         without selecting the document for viewing in the right pane.
-        Clicking elsewhere in the row selects the document for viewing.
+        Clicking on the filename text (or any other part of the row) selects
+        the document for viewing.
         """
-        # Skip document selection when clicking on the checkbox column
-        # to allow toggling checkboxes without changing the viewed document
-        if column == 0:
+        # Check if a checkbox was just toggled - if so, don't select the document
+        # The itemChanged signal fires before cellClicked when clicking a checkbox
+        if self._checkbox_just_toggled:
+            self._checkbox_just_toggled = False
             return
         
         filename_item = self.file_table.item(row, 0)
@@ -1124,8 +1152,10 @@ class LeidenEpiDocGUI(QMainWindow):
                         converted_item.setText("✗ Error")
                     else:
                         converted_item.setText("✓ Converted")
-                # Uncheck the file
+                # Uncheck the file - block signals to prevent _on_item_changed from triggering
+                self.file_table.blockSignals(True)
                 filename_item.setCheckState(Qt.Unchecked)
+                self.file_table.blockSignals(False)
                 break
         
         # Update save button state since a file was just converted
