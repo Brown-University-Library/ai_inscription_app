@@ -969,13 +969,9 @@ class LeidenEpiDocGUI(QMainWindow):
     def on_file_selected(self, row, column):
         """Handle file selection from the table.
         
-        Clicking on the checkbox column (column 0) only toggles the checkbox.
-        Clicking anywhere else in the row selects the document for viewing.
+        Clicking anywhere in the row selects the document for viewing.
+        The checkbox in column 0 toggles independently when clicked directly.
         """
-        # Column 0 is the checkbox column - don't select the document
-        if column == 0:
-            return
-        
         # Get file path from column 1 (filename column)
         filename_item = self.file_table.item(row, 1)
         if filename_item:
