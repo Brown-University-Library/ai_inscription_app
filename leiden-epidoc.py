@@ -17,10 +17,10 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView
+    QHeaderView, QAbstractItemView, QMenu
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QFont, QPalette, QColor, QActionGroup
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -96,6 +96,7 @@ class LeidenToEpiDocConverter:
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "claude-sonnet-4-20250514")
         self.save_location = self.config.get("save_location", str(Path.home()))
+        self.theme = self.config.get("theme", "system")  # "light", "dark", or "system"
         self.last_output = ""
         # Custom prompt and examples (None means use defaults from leiden_prompts.py)
         self.custom_prompt = None
@@ -116,7 +117,8 @@ class LeidenToEpiDocConverter:
         config = {
             "api_key": self.api_key,
             "model": self.model,
-            "save_location": self.save_location
+            "save_location": self.save_location,
+            "theme": self.theme
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
@@ -792,6 +794,60 @@ class LeidenEpiDocGUI(QMainWindow):
         edit_examples_action = QAction("Edit Examples", self)
         edit_examples_action.triggered.connect(self.show_examples_editor)
         settings_menu.addAction(edit_examples_action)
+        settings_menu.addSeparator()
+        
+        # Preferences submenu
+        preferences_menu = settings_menu.addMenu("Preferences")
+        
+        # Theme submenu within Preferences
+        theme_menu = preferences_menu.addMenu("Theme")
+        
+        # Create action group for mutual exclusivity
+        self.theme_action_group = QActionGroup(self)
+        self.theme_action_group.setExclusive(True)
+        
+        # Light theme action
+        self.light_theme_action = QAction("Light", self, checkable=True)
+        self.light_theme_action.triggered.connect(lambda: self.set_theme("light"))
+        self.theme_action_group.addAction(self.light_theme_action)
+        theme_menu.addAction(self.light_theme_action)
+        
+        # Dark theme action
+        self.dark_theme_action = QAction("Dark", self, checkable=True)
+        self.dark_theme_action.triggered.connect(lambda: self.set_theme("dark"))
+        self.theme_action_group.addAction(self.dark_theme_action)
+        theme_menu.addAction(self.dark_theme_action)
+        
+        # System theme action (default)
+        self.system_theme_action = QAction("System (Default)", self, checkable=True)
+        self.system_theme_action.triggered.connect(lambda: self.set_theme("system"))
+        self.theme_action_group.addAction(self.system_theme_action)
+        theme_menu.addAction(self.system_theme_action)
+        
+        # Set the correct action as checked based on current theme
+        current_theme = self.converter.theme
+        if current_theme == "light":
+            self.light_theme_action.setChecked(True)
+        elif current_theme == "dark":
+            self.dark_theme_action.setChecked(True)
+        else:
+            self.system_theme_action.setChecked(True)
+
+    def set_theme(self, theme: str) -> None:
+        """Set the application theme and persist the preference.
+        
+        Args:
+            theme: One of "light", "dark", or "system"
+        """
+        self.converter.theme = theme
+        self.converter.save_config()
+        
+        # Apply theme immediately
+        app = QApplication.instance()
+        if app:
+            apply_theme(app, theme)
+        
+        self.status_label.setText(f"Theme changed to {theme.capitalize()}.")
 
     def on_tab_changed(self, index):
         """Handle tab change to update which content is displayed"""
@@ -1413,6 +1469,75 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.status_label.setText("Examples settings updated.")
 
 
+def apply_theme(app: QApplication, theme: str) -> None:
+    """Apply the specified theme to the application.
+    
+    Args:
+        app: The QApplication instance
+        theme: One of "light", "dark", or "system"
+    """
+    if theme == "light":
+        # Force light theme
+        palette = QPalette()
+        # Window background
+        palette.setColor(QPalette.Window, QColor(240, 240, 240))
+        palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
+        # Base colors for text inputs
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))
+        palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
+        palette.setColor(QPalette.Text, QColor(0, 0, 0))
+        # Button colors
+        palette.setColor(QPalette.Button, QColor(240, 240, 240))
+        palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
+        # Highlight colors
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        # ToolTip colors
+        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 220))
+        palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))
+        # Link colors
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.LinkVisited, QColor(128, 0, 128))
+        # Disabled colors
+        palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+        app.setPalette(palette)
+        app.setStyleSheet("")
+    elif theme == "dark":
+        # Force dark theme
+        palette = QPalette()
+        # Window background
+        palette.setColor(QPalette.Window, QColor(53, 53, 53))
+        palette.setColor(QPalette.WindowText, QColor(255, 255, 255))
+        # Base colors for text inputs
+        palette.setColor(QPalette.Base, QColor(35, 35, 35))
+        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.Text, QColor(255, 255, 255))
+        # Button colors
+        palette.setColor(QPalette.Button, QColor(53, 53, 53))
+        palette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+        # Highlight colors
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        # ToolTip colors
+        palette.setColor(QPalette.ToolTipBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
+        # Link colors
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.LinkVisited, QColor(128, 0, 128))
+        # Disabled colors
+        palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+        app.setPalette(palette)
+        app.setStyleSheet("")
+    else:
+        # System theme - reset to default
+        app.setPalette(app.style().standardPalette())
+        app.setStyleSheet("")
+
+
 def main():
     app = QApplication(sys.argv)
     
@@ -1421,6 +1546,10 @@ def main():
     app.setFont(font)
     
     window = LeidenEpiDocGUI()
+    
+    # Apply saved theme preference
+    apply_theme(app, window.converter.theme)
+    
     window.show()
     
     sys.exit(app.exec())
