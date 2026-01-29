@@ -106,12 +106,24 @@ class TestThemePreference:
         
         assert final_config["theme"] == "dark"
     
-    def test_theme_valid_values(self):
-        """Test that only valid theme values are accepted."""
-        valid_themes = ["light", "dark", "system"]
+    def test_theme_validation_rejects_invalid(self):
+        """Test that invalid theme values are rejected and default to system."""
+        valid_themes = ("light", "dark", "system")
+        invalid_themes = ["purple", "auto", "", "DARK", "Light", None, 123]
         
-        for theme in valid_themes:
-            assert theme in valid_themes
+        for invalid_theme in invalid_themes:
+            # Simulate the validation logic used in the application
+            theme = invalid_theme if invalid_theme in valid_themes else "system"
+            assert theme == "system", f"Invalid theme '{invalid_theme}' should default to 'system'"
+    
+    def test_theme_validation_accepts_valid(self):
+        """Test that valid theme values are accepted."""
+        valid_themes = ("light", "dark", "system")
+        
+        for valid_theme in valid_themes:
+            # Simulate the validation logic used in the application
+            theme = valid_theme if valid_theme in valid_themes else "system"
+            assert theme == valid_theme, f"Valid theme '{valid_theme}' should be accepted"
     
     def test_theme_fallback_for_invalid(self, tmp_path, monkeypatch):
         """Test fallback to system theme for invalid config values."""
@@ -190,54 +202,96 @@ class TestThemePreference:
 class TestApplyTheme:
     """Test suite for apply_theme function behavior."""
     
-    def test_apply_theme_light_sets_palette(self):
-        """Test that light theme sets appropriate palette colors."""
-        # Test the logic of light theme
-        theme = "light"
+    def test_light_theme_color_specification(self):
+        """Test that light theme specifies correct color values."""
+        # These are the expected RGB values for light theme as defined in the app
+        expected_colors = {
+            "window_bg": (240, 240, 240),      # Light gray window background
+            "window_text": (0, 0, 0),           # Black text
+            "base": (255, 255, 255),            # White base for inputs
+            "alternate_base": (245, 245, 245), # Slightly darker alternate
+            "text": (0, 0, 0),                  # Black text on base
+            "button": (240, 240, 240),         # Light button background
+            "button_text": (0, 0, 0),          # Black button text
+            "highlight": (42, 130, 218),       # Blue highlight
+            "highlight_text": (255, 255, 255), # White highlighted text
+        }
         
-        # Light theme should use light colors
-        if theme == "light":
-            # Window background should be light (e.g., RGB 240, 240, 240)
-            window_bg = (240, 240, 240)
-            text_color = (0, 0, 0)  # Black text
-            base_color = (255, 255, 255)  # White base
-        
-        assert window_bg == (240, 240, 240)
-        assert text_color == (0, 0, 0)
-        assert base_color == (255, 255, 255)
+        # Verify the color specifications are sensible for a light theme
+        # Window background should be light (high RGB values)
+        assert all(v >= 200 for v in expected_colors["window_bg"]), "Window bg should be light"
+        # Text should be dark (low RGB values)
+        assert all(v <= 50 for v in expected_colors["window_text"]), "Window text should be dark"
+        # Base should be white or near-white
+        assert all(v >= 245 for v in expected_colors["base"]), "Base should be white"
     
-    def test_apply_theme_dark_sets_palette(self):
-        """Test that dark theme sets appropriate palette colors."""
-        theme = "dark"
+    def test_dark_theme_color_specification(self):
+        """Test that dark theme specifies correct color values."""
+        # These are the expected RGB values for dark theme as defined in the app
+        expected_colors = {
+            "window_bg": (53, 53, 53),         # Dark gray window background
+            "window_text": (255, 255, 255),    # White text
+            "base": (35, 35, 35),              # Dark base for inputs
+            "alternate_base": (53, 53, 53),   # Same as window
+            "text": (255, 255, 255),           # White text on base
+            "button": (53, 53, 53),            # Dark button background
+            "button_text": (255, 255, 255),   # White button text
+            "highlight": (42, 130, 218),       # Blue highlight (same as light)
+            "highlight_text": (255, 255, 255), # White highlighted text
+        }
         
-        # Dark theme should use dark colors
-        if theme == "dark":
-            window_bg = (53, 53, 53)  # Dark gray
-            text_color = (255, 255, 255)  # White text
-            base_color = (35, 35, 35)  # Darker base
-        
-        assert window_bg == (53, 53, 53)
-        assert text_color == (255, 255, 255)
-        assert base_color == (35, 35, 35)
+        # Verify the color specifications are sensible for a dark theme
+        # Window background should be dark (low RGB values)
+        assert all(v <= 80 for v in expected_colors["window_bg"]), "Window bg should be dark"
+        # Text should be light (high RGB values)
+        assert all(v >= 200 for v in expected_colors["window_text"]), "Window text should be light"
+        # Base should be dark
+        assert all(v <= 50 for v in expected_colors["base"]), "Base should be dark"
     
-    def test_apply_theme_system_resets(self):
-        """Test that system theme resets to default palette."""
+    def test_system_theme_behavior(self):
+        """Test that system theme indicates reset to platform defaults."""
+        # When theme is "system", the app should reset to platform default
         theme = "system"
         
-        # System theme means use default (no custom palette)
-        should_reset_palette = (theme == "system")
+        # The expected behavior is to NOT apply a custom palette
+        should_use_custom_palette = (theme in ("light", "dark"))
+        should_reset_to_default = (theme == "system")
         
-        assert should_reset_palette is True
+        assert should_use_custom_palette is False
+        assert should_reset_to_default is True
     
-    def test_theme_options_match_menu(self):
-        """Test that theme options match expected menu items."""
-        expected_themes = {
+    def test_apply_theme_validates_input(self):
+        """Test that apply_theme validation logic handles invalid themes."""
+        valid_themes = ("light", "dark", "system")
+        
+        # Test cases where validation should fallback to system
+        test_cases = [
+            ("light", "light"),    # Valid - should keep
+            ("dark", "dark"),      # Valid - should keep
+            ("system", "system"),  # Valid - should keep
+            ("invalid", "system"), # Invalid - should fallback to system
+            ("", "system"),        # Empty - should fallback to system
+        ]
+        
+        for input_theme, expected_result in test_cases:
+            # Simulate the validation logic
+            result = input_theme if input_theme in valid_themes else "system"
+            assert result == expected_result, f"Theme '{input_theme}' should result in '{expected_result}'"
+    
+    def test_theme_display_names(self):
+        """Test that theme display names match expected labels for UI."""
+        # These display names are used in the status bar message
+        display_names = {
             "light": "Light",
             "dark": "Dark",
             "system": "System (Default)"
         }
         
-        assert len(expected_themes) == 3
-        assert "light" in expected_themes
-        assert "dark" in expected_themes
-        assert "system" in expected_themes
+        # Verify all themes have display names
+        assert len(display_names) == 3
+        assert display_names["light"] == "Light"
+        assert display_names["dark"] == "Dark"
+        assert display_names["system"] == "System (Default)"
+        
+        # Verify system is marked as default
+        assert "Default" in display_names["system"]

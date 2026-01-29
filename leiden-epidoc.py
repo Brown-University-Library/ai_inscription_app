@@ -96,7 +96,9 @@ class LeidenToEpiDocConverter:
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "claude-sonnet-4-20250514")
         self.save_location = self.config.get("save_location", str(Path.home()))
-        self.theme = self.config.get("theme", "system")  # "light", "dark", or "system"
+        # Load theme with validation - default to "system" for invalid values
+        loaded_theme = self.config.get("theme", "system")
+        self.theme = loaded_theme if loaded_theme in ("light", "dark", "system") else "system"
         self.last_output = ""
         # Custom prompt and examples (None means use defaults from leiden_prompts.py)
         self.custom_prompt = None
@@ -839,6 +841,12 @@ class LeidenEpiDocGUI(QMainWindow):
         Args:
             theme: One of "light", "dark", or "system"
         """
+        # Validate theme value
+        valid_themes = ("light", "dark", "system")
+        if theme not in valid_themes:
+            logger.warning(f"Invalid theme '{theme}', defaulting to 'system'")
+            theme = "system"
+        
         self.converter.theme = theme
         self.converter.save_config()
         
@@ -847,7 +855,9 @@ class LeidenEpiDocGUI(QMainWindow):
         if app:
             apply_theme(app, theme)
         
-        self.status_label.setText(f"Theme changed to {theme.capitalize()}.")
+        # Use user-friendly display names
+        display_names = {"light": "Light", "dark": "Dark", "system": "System (Default)"}
+        self.status_label.setText(f"Theme changed to {display_names[theme]}.")
 
     def on_tab_changed(self, index):
         """Handle tab change to update which content is displayed"""
@@ -1476,6 +1486,12 @@ def apply_theme(app: QApplication, theme: str) -> None:
         app: The QApplication instance
         theme: One of "light", "dark", or "system"
     """
+    # Validate theme value - default to system for invalid values
+    valid_themes = ("light", "dark", "system")
+    if theme not in valid_themes:
+        logger.warning(f"Invalid theme '{theme}' in apply_theme, defaulting to 'system'")
+        theme = "system"
+    
     if theme == "light":
         # Force light theme
         palette = QPalette()
