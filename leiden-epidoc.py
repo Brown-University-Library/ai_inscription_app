@@ -651,6 +651,14 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        # Apply custom selection styling for consistent visibility across all themes
+        # Uses a distinct blue background with white text that works in both light and dark modes
+        self.file_table.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #0078D4;
+                color: white;
+            }
+        """)
         # Use selectionChanged instead of cellClicked so checkbox clicks don't trigger selection
         # When clicking a checkbox, Qt toggles it but doesn't change row selection
         # When clicking elsewhere in the row, Qt changes the row selection
