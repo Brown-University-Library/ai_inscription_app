@@ -1054,7 +1054,6 @@ class LeidenEpiDocGUI(QMainWindow):
                         enable = True
                         break
         self.save_btn.setEnabled(enable)
-    
     def _display_file_content(self, file_item):
         """Display the content of the selected file in the right pane"""
         # Always show input text
