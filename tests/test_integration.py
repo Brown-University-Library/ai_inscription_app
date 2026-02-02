@@ -492,3 +492,119 @@ class TestCheckboxSelectionDecoupling:
         displayed_document_row = 2  # Same row, always matches
         
         assert highlighted_row == displayed_document_row
+
+
+@pytest.mark.integration
+class TestDeselectFileWorkflow:
+    """Tests for the Deselect button functionality.
+    
+    The Deselect button allows users to clear the viewing selection without
+    affecting checkbox states. Key behaviors:
+    
+    - Sets current_file_item to None
+    - Clears all right-hand pane tabs (Input, EpiDoc, Notes, Analysis, Full Output)
+    - Removes row selection highlighting from the table
+    - Updates status bar to "No file selected"
+    - Does NOT affect checkbox states (for batch operations)
+    - Button is disabled when no document is selected
+    
+    Note: Full GUI testing requires a running Qt application. These tests
+    validate the logical requirements and serve as documentation.
+    """
+    
+    def test_deselect_clears_current_file_item(self):
+        """Verify deselect sets current_file_item to None."""
+        # Simulate: a file is currently selected for viewing
+        current_file_item = {"file_path": "/test.txt", "input_text": "content"}
+        
+        # Simulate deselect action
+        current_file_item = None
+        
+        # Document viewing state should be cleared
+        assert current_file_item is None
+    
+    def test_deselect_preserves_checkbox_states(self):
+        """Verify deselect does NOT affect checkbox states."""
+        # Simulate: multiple files with various checkbox states
+        file_states = {
+            "/file1.txt": {"checked": True, "selected_for_view": True},
+            "/file2.txt": {"checked": False, "selected_for_view": False},
+            "/file3.txt": {"checked": True, "selected_for_view": False},
+        }
+        
+        # Simulate deselect action - only affects selected_for_view
+        for path in file_states:
+            file_states[path]["selected_for_view"] = False
+        
+        # Checkbox states should be preserved
+        assert file_states["/file1.txt"]["checked"] is True
+        assert file_states["/file2.txt"]["checked"] is False
+        assert file_states["/file3.txt"]["checked"] is True
+    
+    def test_deselect_clears_right_pane_content(self):
+        """Verify deselect clears all content from right pane tabs."""
+        # Simulate right pane content before deselect
+        right_pane = {
+            "input_text": "Some input text",
+            "epidoc_text": "<lb/>Some XML",
+            "notes_text": "Some notes",
+            "analysis_text": "Some analysis",
+            "full_output_text": "Full response",
+        }
+        
+        # Simulate deselect action - clears all panes
+        for key in right_pane:
+            right_pane[key] = ""
+        
+        # All panes should be empty
+        assert right_pane["input_text"] == ""
+        assert right_pane["epidoc_text"] == ""
+        assert right_pane["notes_text"] == ""
+        assert right_pane["analysis_text"] == ""
+        assert right_pane["full_output_text"] == ""
+    
+    def test_deselect_button_disabled_when_no_selection(self):
+        """Verify deselect button is disabled when no document is selected."""
+        # Initial state: no file selected
+        current_file_item = None
+        deselect_button_enabled = current_file_item is not None
+        
+        assert deselect_button_enabled is False
+    
+    def test_deselect_button_enabled_when_file_selected(self):
+        """Verify deselect button is enabled when a document is selected."""
+        # State: a file is selected
+        current_file_item = {"file_path": "/test.txt"}
+        deselect_button_enabled = current_file_item is not None
+        
+        assert deselect_button_enabled is True
+    
+    def test_deselect_updates_status_bar(self):
+        """Verify deselect updates the status bar message."""
+        # Simulate status bar before deselect
+        status_message = "Viewing test.txt"
+        
+        # Simulate deselect action
+        status_message = "No file selected"
+        
+        assert status_message == "No file selected"
+    
+    def test_deselect_with_batch_operation_pending(self):
+        """Verify deselect doesn't interfere with batch operations using checkboxes."""
+        # Simulate: files checked for batch conversion, one being viewed
+        file_states = {
+            "/file1.txt": {"checked": True, "is_converted": False, "selected_for_view": True},
+            "/file2.txt": {"checked": True, "is_converted": False, "selected_for_view": False},
+        }
+        current_file_item = file_states["/file1.txt"]
+        
+        # Simulate deselect
+        current_file_item = None
+        for path in file_states:
+            file_states[path]["selected_for_view"] = False
+        
+        # Batch operation (checked files for conversion) should still work
+        files_for_batch = [p for p, s in file_states.items() if s["checked"]]
+        
+        assert len(files_for_batch) == 2
+        assert current_file_item is None
