@@ -637,6 +637,11 @@ class LeidenEpiDocGUI(QMainWindow):
         self.clear_files_btn.setEnabled(False)  # Disabled when no files loaded
         file_btn_layout.addWidget(self.clear_files_btn)
         
+        self.deselect_btn = QPushButton("Deselect")
+        self.deselect_btn.clicked.connect(self.deselect_file)
+        self.deselect_btn.setEnabled(False)  # Disabled when no document is selected
+        file_btn_layout.addWidget(self.deselect_btn)
+        
         left_layout.addLayout(file_btn_layout)
         
         # File table
@@ -941,6 +946,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.select_converted_btn.setEnabled(False)
         self.select_unconverted_btn.setEnabled(False)
         self.clear_files_btn.setEnabled(False)
+        self.deselect_btn.setEnabled(False)
         
         # Update status bar
         self.status_label.setText("All files cleared")
@@ -977,6 +983,33 @@ class LeidenEpiDocGUI(QMainWindow):
         
         self.status_label.setText("Selected all unconverted files")
     
+    def deselect_file(self):
+        """Deselect the currently viewed file and clear the right pane.
+        
+        This only affects the viewing selection - checkbox states are NOT affected.
+        """
+        # Clear row selection highlighting from the table
+        self.file_table.clearSelection()
+        
+        # Reset current file item
+        self.current_file_item = None
+        
+        # Clear all right-hand panes
+        self.input_text.setPlainText("")
+        self.epidoc_text.setPlainText("")
+        self.notes_text.setPlainText("")
+        self.analysis_text.setPlainText("")
+        self.full_output_text.setPlainText("")
+        
+        # Disable deselect button (no file selected now)
+        self.deselect_btn.setEnabled(False)
+        
+        # Update save button state
+        self._update_save_button_state()
+        
+        # Update status bar
+        self.status_label.setText("No file selected")
+    
     def on_row_selection_changed(self, selected, deselected):
         """Handle row selection changes in the table.
         
@@ -1000,6 +1033,8 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.current_file_item = self.file_items[file_path]
                 self._display_file_content(self.current_file_item)
                 self._update_save_button_state()
+                # Enable deselect button when a file is selected
+                self.deselect_btn.setEnabled(True)
     
     def _update_save_button_state(self):
         """Enable save button only if current file or any checked file is successfully converted (no errors)"""
