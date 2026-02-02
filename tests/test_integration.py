@@ -378,28 +378,7 @@ class TestFileNameHandling:
 
 @pytest.mark.integration
 class TestCheckboxSelectionDecoupling:
-    """Tests for checkbox selection decoupling behavior.
-    
-    The implementation uses Qt's selectionModel().selectionChanged signal instead
-    of cellClicked. This means:
-    
-    - Clicking on a checkbox: toggles the checkbox but does NOT change row selection
-    - Clicking elsewhere in the row: changes row selection and displays that document
-    
-    Table structure:
-    - Column 0: Checkbox (for batch selection)
-    - Column 1: Filename (stores file_path in UserRole data)
-    - Column 2: Status (Queued, In Progress, ✓ Converted, ✗ Error)
-    
-    Key behaviors:
-    - Checkbox clicks do NOT trigger document selection (row selection unchanged)
-    - Row clicks (non-checkbox area) change row selection and display document
-    - The checkbox state determines which files are included in batch operations
-    - The row highlighting always matches the document shown in the right pane
-    
-    Note: Full GUI testing requires a running Qt application. These tests
-    validate the logical requirements and serve as documentation.
-    """
+    """Tests verifying that checkbox clicks and row selection are independent operations."""
     
     def test_checkbox_click_does_not_change_selection(self):
         """Verify clicking checkbox does NOT change which document is displayed.
