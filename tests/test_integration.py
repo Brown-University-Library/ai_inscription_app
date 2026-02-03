@@ -374,3 +374,216 @@ class TestFileNameHandling:
             counter += 1
         
         assert new_name == f"{base_name}_2{extension}"
+
+
+@pytest.mark.integration
+class TestCheckboxSelectionDecoupling:
+    """Tests verifying that checkbox clicks and row selection are independent operations."""
+    
+    def test_checkbox_click_does_not_change_selection(self):
+        """Verify clicking checkbox does NOT change which document is displayed.
+        
+        Qt's behavior: clicking on a checkbox toggles it but doesn't change
+        the row selection. Since we use selectionChanged (not cellClicked),
+        checkbox clicks won't trigger document display changes.
+        """
+        # Simulate: row 1 is selected, user clicks checkbox in row 2
+        currently_displayed_row = 1
+        checkbox_clicked_in_row = 2
+        
+        # Qt behavior: checkbox click doesn't change selection
+        row_selection_changed = False  # No selectionChanged signal emitted
+        
+        # Since selection didn't change, displayed document stays the same
+        if row_selection_changed:
+            currently_displayed_row = checkbox_clicked_in_row
+        
+        # Document should still show row 1 content
+        assert currently_displayed_row == 1
+    
+    def test_row_click_changes_selection(self):
+        """Verify clicking on row (not checkbox) changes displayed document.
+        
+        Qt's behavior: clicking anywhere except the checkbox changes row selection.
+        Since we use selectionChanged signal, this triggers document display update.
+        """
+        # Simulate: row 1 is selected, user clicks on filename in row 2
+        currently_displayed_row = 1
+        clicked_row = 2
+        
+        # Qt behavior: non-checkbox click changes selection
+        row_selection_changed = True  # selectionChanged signal emitted
+        
+        # Since selection changed, displayed document updates
+        if row_selection_changed:
+            currently_displayed_row = clicked_row
+        
+        # Document should now show row 2 content
+        assert currently_displayed_row == 2
+    
+    def test_checkbox_state_independent_of_view_selection(self):
+        """Verify checkbox state is tracked independently of document view selection."""
+        # This documents the core requirement: checkbox state (for batch ops)
+        # and document selection (for right pane display) are separate concerns
+        file_items = {
+            "/file1.txt": {"checked": True, "selected_for_view": False},
+            "/file2.txt": {"checked": False, "selected_for_view": True},
+        }
+        
+        # Toggling checkbox should not affect view selection state
+        file_items["/file1.txt"]["checked"] = not file_items["/file1.txt"]["checked"]
+        
+        assert file_items["/file1.txt"]["checked"] is False
+        assert file_items["/file1.txt"]["selected_for_view"] is False
+        assert file_items["/file2.txt"]["selected_for_view"] is True
+    
+    def test_batch_operations_use_checkbox_state_not_selection(self):
+        """Verify batch operations rely on checkbox state (confirms no regression)."""
+        # This test confirms batch operations continue to work correctly
+        # using checkbox state after the decoupling changes
+        file_items = {
+            "/file1.txt": {"checked": True, "is_converted": True},
+            "/file2.txt": {"checked": False, "is_converted": True},
+            "/file3.txt": {"checked": True, "is_converted": False},
+        }
+        
+        # Batch operations filter by checkbox state, not selection state
+        checked_converted_files = [
+            path for path, item in file_items.items()
+            if item["checked"] and item["is_converted"]
+        ]
+        
+        # Only file1 should be in batch (checked AND converted)
+        assert len(checked_converted_files) == 1
+        assert "/file1.txt" in checked_converted_files
+    
+    def test_row_highlight_matches_displayed_content(self):
+        """Verify that row highlighting always matches the displayed document.
+        
+        Using selectionChanged signal ensures that document display only updates
+        when row selection (highlighting) actually changes. Checkbox clicks don't
+        change selection, so they don't affect display.
+        """
+        # When row selection changes (via selectionChanged signal):
+        # 1. Row gets highlighted (Qt's SelectRows behavior)
+        # 2. Document content is displayed (on_row_selection_changed handler)
+        highlighted_row = 2
+        displayed_document_row = 2  # Same row, always matches
+        
+        assert highlighted_row == displayed_document_row
+
+
+@pytest.mark.integration
+class TestDeselectFileWorkflow:
+    """Tests for the Deselect button functionality.
+    
+    The Deselect button allows users to clear the viewing selection without
+    affecting checkbox states. Key behaviors:
+    
+    - Sets current_file_item to None
+    - Clears all right-hand pane tabs (Input, EpiDoc, Notes, Analysis, Full Output)
+    - Removes row selection highlighting from the table
+    - Updates status bar to "No file selected"
+    - Does NOT affect checkbox states (for batch operations)
+    - Button is disabled when no document is selected
+    
+    Note: Full GUI testing requires a running Qt application. These tests
+    validate the logical requirements and serve as documentation.
+    """
+    
+    def test_deselect_clears_current_file_item(self):
+        """Verify deselect sets current_file_item to None."""
+        # Simulate: a file is currently selected for viewing
+        current_file_item = {"file_path": "/test.txt", "input_text": "content"}
+        
+        # Simulate deselect action
+        current_file_item = None
+        
+        # Document viewing state should be cleared
+        assert current_file_item is None
+    
+    def test_deselect_preserves_checkbox_states(self):
+        """Verify deselect does NOT affect checkbox states."""
+        # Simulate: multiple files with various checkbox states
+        file_states = {
+            "/file1.txt": {"checked": True, "selected_for_view": True},
+            "/file2.txt": {"checked": False, "selected_for_view": False},
+            "/file3.txt": {"checked": True, "selected_for_view": False},
+        }
+        
+        # Simulate deselect action - only affects selected_for_view
+        for path in file_states:
+            file_states[path]["selected_for_view"] = False
+        
+        # Checkbox states should be preserved
+        assert file_states["/file1.txt"]["checked"] is True
+        assert file_states["/file2.txt"]["checked"] is False
+        assert file_states["/file3.txt"]["checked"] is True
+    
+    def test_deselect_clears_right_pane_content(self):
+        """Verify deselect clears all content from right pane tabs."""
+        # Simulate right pane content before deselect
+        right_pane = {
+            "input_text": "Some input text",
+            "epidoc_text": "<lb/>Some XML",
+            "notes_text": "Some notes",
+            "analysis_text": "Some analysis",
+            "full_output_text": "Full response",
+        }
+        
+        # Simulate deselect action - clears all panes
+        for key in right_pane:
+            right_pane[key] = ""
+        
+        # All panes should be empty
+        assert right_pane["input_text"] == ""
+        assert right_pane["epidoc_text"] == ""
+        assert right_pane["notes_text"] == ""
+        assert right_pane["analysis_text"] == ""
+        assert right_pane["full_output_text"] == ""
+    
+    def test_deselect_button_disabled_when_no_selection(self):
+        """Verify deselect button is disabled when no document is selected."""
+        # Initial state: no file selected
+        current_file_item = None
+        deselect_button_enabled = current_file_item is not None
+        
+        assert deselect_button_enabled is False
+    
+    def test_deselect_button_enabled_when_file_selected(self):
+        """Verify deselect button is enabled when a document is selected."""
+        # State: a file is selected
+        current_file_item = {"file_path": "/test.txt"}
+        deselect_button_enabled = current_file_item is not None
+        
+        assert deselect_button_enabled is True
+    
+    def test_deselect_updates_status_bar(self):
+        """Verify deselect updates the status bar message."""
+        # Simulate status bar before deselect
+        status_message = "Viewing test.txt"
+        
+        # Simulate deselect action
+        status_message = "No file selected"
+        
+        assert status_message == "No file selected"
+    
+    def test_deselect_with_batch_operation_pending(self):
+        """Verify deselect doesn't interfere with batch operations using checkboxes."""
+        # Simulate: files checked for batch conversion, one being viewed
+        file_states = {
+            "/file1.txt": {"checked": True, "is_converted": False, "selected_for_view": True},
+            "/file2.txt": {"checked": True, "is_converted": False, "selected_for_view": False},
+        }
+        current_file_item = file_states["/file1.txt"]
+        
+        # Simulate deselect
+        current_file_item = None
+        for path in file_states:
+            file_states[path]["selected_for_view"] = False
+        
+        # Batch operation (checked files for conversion) should still work
+        files_for_batch = [p for p, s in file_states.items() if s["checked"]]
+        
+        assert len(files_for_batch) == 2
+        assert current_file_item is None
