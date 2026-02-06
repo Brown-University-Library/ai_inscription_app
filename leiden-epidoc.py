@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView
+    QHeaderView, QAbstractItemView, QGridLayout
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QFont
@@ -674,19 +674,29 @@ class LeidenEpiDocGUI(QMainWindow):
         button_area_layout = QVBoxLayout()
         button_area_layout.setSpacing(8)
         
-        # Checkbox action buttons row
-        selection_btn_layout = QHBoxLayout()
+        # Checkbox action buttons in 2x2 grid
+        selection_btn_layout = QGridLayout()
         selection_btn_layout.setSpacing(8)
+        
+        self.check_all_btn = QPushButton("Check All")
+        self.check_all_btn.clicked.connect(self.check_all)
+        self.check_all_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.check_all_btn, 0, 0)
+        
+        self.uncheck_all_btn = QPushButton("Uncheck All")
+        self.uncheck_all_btn.clicked.connect(self.uncheck_all)
+        self.uncheck_all_btn.setEnabled(False)
+        selection_btn_layout.addWidget(self.uncheck_all_btn, 0, 1)
         
         self.select_converted_btn = QPushButton("Check Converted")
         self.select_converted_btn.clicked.connect(self.select_all_converted)
         self.select_converted_btn.setEnabled(False)
-        selection_btn_layout.addWidget(self.select_converted_btn)
+        selection_btn_layout.addWidget(self.select_converted_btn, 1, 0)
         
         self.select_unconverted_btn = QPushButton("Check Unconverted")
         self.select_unconverted_btn.clicked.connect(self.select_all_unconverted)
         self.select_unconverted_btn.setEnabled(False)
-        selection_btn_layout.addWidget(self.select_unconverted_btn)
+        selection_btn_layout.addWidget(self.select_unconverted_btn, 1, 1)
         
         button_area_layout.addLayout(selection_btn_layout)
         
@@ -898,6 +908,17 @@ class LeidenEpiDocGUI(QMainWindow):
         """Update the enabled state of selection buttons based on available files"""
         has_converted = False
         has_unconverted = False
+        has_any_files = self.file_table.rowCount() > 0
+        all_checked = has_any_files
+        any_checked = False
+        
+        for row in range(self.file_table.rowCount()):
+            checkbox_item = self.file_table.item(row, 0)
+            if checkbox_item:
+                if checkbox_item.checkState() == Qt.Checked:
+                    any_checked = True
+                else:
+                    all_checked = False
         
         for file_path, file_item in self.file_items.items():
             if file_item.is_converted:
@@ -911,6 +932,8 @@ class LeidenEpiDocGUI(QMainWindow):
         
         self.select_converted_btn.setEnabled(has_converted)
         self.select_unconverted_btn.setEnabled(has_unconverted)
+        self.check_all_btn.setEnabled(has_any_files and not all_checked)
+        self.uncheck_all_btn.setEnabled(any_checked)
     
     def clear_all_files(self):
         """Clear all loaded files and reset application state"""
@@ -945,6 +968,8 @@ class LeidenEpiDocGUI(QMainWindow):
         self.save_btn.setEnabled(False)
         self.select_converted_btn.setEnabled(False)
         self.select_unconverted_btn.setEnabled(False)
+        self.check_all_btn.setEnabled(False)
+        self.uncheck_all_btn.setEnabled(False)
         self.clear_files_btn.setEnabled(False)
         self.deselect_btn.setEnabled(False)
         
@@ -966,6 +991,7 @@ class LeidenEpiDocGUI(QMainWindow):
                         checkbox_item.setCheckState(Qt.Unchecked)
         
         self.status_label.setText("Checked all converted files")
+        self._update_selection_button_states()
     
     def select_all_unconverted(self):
         """Check all files that have not been converted"""
@@ -982,6 +1008,27 @@ class LeidenEpiDocGUI(QMainWindow):
                         checkbox_item.setCheckState(Qt.Unchecked)
         
         self.status_label.setText("Checked all unconverted files")
+        self._update_selection_button_states()
+    
+    def check_all(self):
+        """Check all file checkboxes"""
+        for row in range(self.file_table.rowCount()):
+            checkbox_item = self.file_table.item(row, 0)
+            if checkbox_item:
+                checkbox_item.setCheckState(Qt.Checked)
+        
+        self.status_label.setText("All files checked")
+        self._update_selection_button_states()
+    
+    def uncheck_all(self):
+        """Uncheck all file checkboxes"""
+        for row in range(self.file_table.rowCount()):
+            checkbox_item = self.file_table.item(row, 0)
+            if checkbox_item:
+                checkbox_item.setCheckState(Qt.Unchecked)
+        
+        self.status_label.setText("All files unchecked")
+        self._update_selection_button_states()
     
     def deselect_file(self):
         """Deselect the currently viewed file and clear the right pane.
