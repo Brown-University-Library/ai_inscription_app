@@ -674,24 +674,24 @@ class LeidenEpiDocGUI(QMainWindow):
         button_area_layout = QVBoxLayout()
         button_area_layout.setSpacing(8)
         
-        # Selection buttons row
+        # Checkbox action buttons row
         selection_btn_layout = QHBoxLayout()
         selection_btn_layout.setSpacing(8)
         
-        self.select_converted_btn = QPushButton("Select Converted")
+        self.select_converted_btn = QPushButton("Check Converted")
         self.select_converted_btn.clicked.connect(self.select_all_converted)
         self.select_converted_btn.setEnabled(False)
         selection_btn_layout.addWidget(self.select_converted_btn)
         
-        self.select_unconverted_btn = QPushButton("Select Unconverted")
+        self.select_unconverted_btn = QPushButton("Check Unconverted")
         self.select_unconverted_btn.clicked.connect(self.select_all_unconverted)
         self.select_unconverted_btn.setEnabled(False)
         selection_btn_layout.addWidget(self.select_unconverted_btn)
         
         button_area_layout.addLayout(selection_btn_layout)
         
-        # Convert selected button
-        self.convert_btn = QPushButton("Convert Selected to EpiDoc")
+        # Convert checked button
+        self.convert_btn = QPushButton("Convert Checked to EpiDoc")
         self.convert_btn.setMinimumHeight(40)
         self.convert_btn.clicked.connect(self.convert_selected)
         self.convert_btn.setEnabled(False)
@@ -952,7 +952,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.status_label.setText("All files cleared")
     
     def select_all_converted(self):
-        """Select all files that have been converted"""
+        """Check all files that have been converted"""
         for row in range(self.file_table.rowCount()):
             checkbox_item = self.file_table.item(row, 0)
             filename_item = self.file_table.item(row, 1)
@@ -965,10 +965,10 @@ class LeidenEpiDocGUI(QMainWindow):
                     else:
                         checkbox_item.setCheckState(Qt.Unchecked)
         
-        self.status_label.setText("Selected all converted files")
+        self.status_label.setText("Checked all converted files")
     
     def select_all_unconverted(self):
-        """Select all files that have not been converted"""
+        """Check all files that have not been converted"""
         for row in range(self.file_table.rowCount()):
             checkbox_item = self.file_table.item(row, 0)
             filename_item = self.file_table.item(row, 1)
@@ -981,7 +981,7 @@ class LeidenEpiDocGUI(QMainWindow):
                     else:
                         checkbox_item.setCheckState(Qt.Unchecked)
         
-        self.status_label.setText("Selected all unconverted files")
+        self.status_label.setText("Checked all unconverted files")
     
     def deselect_file(self):
         """Deselect the currently viewed file and clear the right pane.
@@ -1090,7 +1090,7 @@ class LeidenEpiDocGUI(QMainWindow):
             self.full_output_text.setPlainText("")
     
     def convert_selected(self):
-        """Convert all selected files"""
+        """Convert all checked files"""
         # Guard against starting a new conversion while one is already running
         if self.conversion_thread and self.conversion_thread.isRunning():
             return
