@@ -1107,8 +1107,8 @@ class LeidenEpiDocGUI(QMainWindow):
                     selected_file_paths.append(file_path)
         
         if not selected_items:
-            QMessageBox.warning(self, "No Selection", 
-                              "Please select at least one file to convert.")
+            QMessageBox.warning(self, "No Files Checked", 
+                              "Please check at least one file to convert.")
             return
         
         # Set all selected files to "Queued" status
