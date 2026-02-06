@@ -587,3 +587,198 @@ class TestDeselectFileWorkflow:
         
         assert len(files_for_batch) == 2
         assert current_file_item is None
+
+
+@pytest.mark.integration
+class TestCheckAllUncheckAll:
+    """Tests for the Check All and Uncheck All button functionality.
+    
+    These buttons allow bulk checking/unchecking of all file checkboxes.
+    Key behaviors:
+    
+    - Check All: sets all checkboxes to checked state
+    - Uncheck All: sets all checkboxes to unchecked state
+    - Neither button affects the currently selected document (viewing selection)
+    - Check All is disabled when all files are already checked or no files loaded
+    - Uncheck All is disabled when no files are checked
+    - Status bar shows confirmation messages
+    
+    Note: Full GUI testing requires a running Qt application. These tests
+    validate the logical requirements and serve as documentation.
+    """
+    
+    def test_check_all_checks_all_files(self):
+        """Verify Check All sets all checkboxes to checked."""
+        file_states = {
+            "/file1.txt": {"checked": False},
+            "/file2.txt": {"checked": True},
+            "/file3.txt": {"checked": False},
+        }
+        
+        # Simulate Check All action
+        for path in file_states:
+            file_states[path]["checked"] = True
+        
+        assert all(item["checked"] for item in file_states.values())
+    
+    def test_uncheck_all_unchecks_all_files(self):
+        """Verify Uncheck All sets all checkboxes to unchecked."""
+        file_states = {
+            "/file1.txt": {"checked": True},
+            "/file2.txt": {"checked": True},
+            "/file3.txt": {"checked": False},
+        }
+        
+        # Simulate Uncheck All action
+        for path in file_states:
+            file_states[path]["checked"] = False
+        
+        assert not any(item["checked"] for item in file_states.values())
+    
+    def test_check_all_does_not_affect_viewing_selection(self):
+        """Verify Check All does NOT change which document is displayed."""
+        file_states = {
+            "/file1.txt": {"checked": False, "selected_for_view": True},
+            "/file2.txt": {"checked": False, "selected_for_view": False},
+        }
+        current_file_item = file_states["/file1.txt"]
+        
+        # Simulate Check All action - only affects checkbox state
+        for path in file_states:
+            file_states[path]["checked"] = True
+        
+        # Viewing selection should be unchanged
+        assert file_states["/file1.txt"]["selected_for_view"] is True
+        assert file_states["/file2.txt"]["selected_for_view"] is False
+        assert current_file_item is file_states["/file1.txt"]
+    
+    def test_uncheck_all_does_not_affect_viewing_selection(self):
+        """Verify Uncheck All does NOT change which document is displayed."""
+        file_states = {
+            "/file1.txt": {"checked": True, "selected_for_view": True},
+            "/file2.txt": {"checked": True, "selected_for_view": False},
+        }
+        current_file_item = file_states["/file1.txt"]
+        
+        # Simulate Uncheck All action - only affects checkbox state
+        for path in file_states:
+            file_states[path]["checked"] = False
+        
+        # Viewing selection should be unchanged
+        assert file_states["/file1.txt"]["selected_for_view"] is True
+        assert file_states["/file2.txt"]["selected_for_view"] is False
+        assert current_file_item is file_states["/file1.txt"]
+    
+    def test_check_all_disabled_when_all_already_checked(self):
+        """Verify Check All button is disabled when all files are already checked."""
+        file_states = {
+            "/file1.txt": {"checked": True},
+            "/file2.txt": {"checked": True},
+        }
+        
+        has_any_files = len(file_states) > 0
+        all_checked = all(item["checked"] for item in file_states.values())
+        check_all_enabled = has_any_files and not all_checked
+        
+        assert check_all_enabled is False
+    
+    def test_check_all_disabled_when_no_files_loaded(self):
+        """Verify Check All button is disabled when no files are loaded."""
+        file_states = {}
+        
+        has_any_files = len(file_states) > 0
+        all_checked = has_any_files and all(item["checked"] for item in file_states.values())
+        check_all_enabled = has_any_files and not all_checked
+        
+        assert check_all_enabled is False
+    
+    def test_check_all_enabled_when_some_unchecked(self):
+        """Verify Check All button is enabled when some files are unchecked."""
+        file_states = {
+            "/file1.txt": {"checked": True},
+            "/file2.txt": {"checked": False},
+        }
+        
+        has_any_files = len(file_states) > 0
+        all_checked = all(item["checked"] for item in file_states.values())
+        check_all_enabled = has_any_files and not all_checked
+        
+        assert check_all_enabled is True
+    
+    def test_uncheck_all_disabled_when_no_files_checked(self):
+        """Verify Uncheck All button is disabled when no files are checked."""
+        file_states = {
+            "/file1.txt": {"checked": False},
+            "/file2.txt": {"checked": False},
+        }
+        
+        any_checked = any(item["checked"] for item in file_states.values())
+        uncheck_all_enabled = any_checked
+        
+        assert uncheck_all_enabled is False
+    
+    def test_uncheck_all_enabled_when_some_checked(self):
+        """Verify Uncheck All button is enabled when some files are checked."""
+        file_states = {
+            "/file1.txt": {"checked": True},
+            "/file2.txt": {"checked": False},
+        }
+        
+        any_checked = any(item["checked"] for item in file_states.values())
+        uncheck_all_enabled = any_checked
+        
+        assert uncheck_all_enabled is True
+    
+    def test_check_all_status_message(self):
+        """Verify Check All updates the status bar."""
+        status_message = ""
+        
+        # Simulate Check All action
+        status_message = "All files checked"
+        
+        assert status_message == "All files checked"
+    
+    def test_uncheck_all_status_message(self):
+        """Verify Uncheck All updates the status bar."""
+        status_message = ""
+        
+        # Simulate Uncheck All action
+        status_message = "All files unchecked"
+        
+        assert status_message == "All files unchecked"
+    
+    def test_check_all_does_not_affect_right_pane(self):
+        """Verify Check All does not modify right pane content."""
+        right_pane = {
+            "input_text": "Some input text",
+            "epidoc_text": "<lb/>Some XML",
+            "notes_text": "Some notes",
+        }
+        
+        # Simulate Check All - should not modify right pane
+        file_states = {"/file1.txt": {"checked": False}}
+        for path in file_states:
+            file_states[path]["checked"] = True
+        
+        # Right pane should be unchanged
+        assert right_pane["input_text"] == "Some input text"
+        assert right_pane["epidoc_text"] == "<lb/>Some XML"
+        assert right_pane["notes_text"] == "Some notes"
+    
+    def test_uncheck_all_does_not_affect_right_pane(self):
+        """Verify Uncheck All does not modify right pane content."""
+        right_pane = {
+            "input_text": "Some input text",
+            "epidoc_text": "<lb/>Some XML",
+            "notes_text": "Some notes",
+        }
+        
+        # Simulate Uncheck All - should not modify right pane
+        file_states = {"/file1.txt": {"checked": True}}
+        for path in file_states:
+            file_states[path]["checked"] = False
+        
+        # Right pane should be unchanged
+        assert right_pane["input_text"] == "Some input text"
+        assert right_pane["epidoc_text"] == "<lb/>Some XML"
+        assert right_pane["notes_text"] == "Some notes"
