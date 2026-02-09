@@ -260,7 +260,7 @@ class APISettingsDialog(QDialog):
         
         self.temperature_input = QLineEdit()
         self.temperature_input.setText(str(self.converter.temperature))
-        self.temperature_input.setPlaceholderText("Default: 0")
+        self.temperature_input.setPlaceholderText("Default: 0.0")
         self.temperature_input.setToolTip(
             "Controls randomness in the output. 0 = deterministic, 1.0 = most random.\n"
             "Lower values produce more consistent results. Default: 0"
@@ -315,7 +315,7 @@ class APISettingsDialog(QDialog):
                     "Temperature must be a number between 0.0 and 1.0.")
                 return
         else:
-            temperature = 0
+            temperature = 0.0
         
         self.converter.api_key = self.api_key_input.text()
         self.converter.model = self.model_input.text()
