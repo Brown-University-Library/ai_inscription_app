@@ -41,7 +41,30 @@ jobs:
             --windows-console-mode=disable `
             --assume-yes-for-downloads `
             --output-filename=LeidenToEpiDoc.exe `
+            --company-name="Brown University Library" `
+            --product-name="Leiden to EpiDoc Converter" `
+            --file-description="Converts Leiden Convention inscriptions to EpiDoc XML" `
+            --file-version="1.0.0.0" `
+            --product-version="1.0.0.0" `
+            --copyright="Brown University Library" `
             leiden-epidoc.py
+
+      - name: Sign executable
+        if: env.WINDOWS_SIGN_CERT != ''
+        env:
+          WINDOWS_SIGN_CERT: ${{ secrets.WINDOWS_SIGN_CERT }}
+          WINDOWS_SIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGN_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_SIGN_CERT)
+          $certPath = Join-Path $env:RUNNER_TEMP "code_sign_cert.pfx"
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+
+          & signtool sign /f $certPath /p $env:WINDOWS_SIGN_CERT_PASSWORD `
+            /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+            LeidenToEpiDoc.exe
+
+          Remove-Item $certPath
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
