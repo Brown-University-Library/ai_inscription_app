@@ -168,7 +168,17 @@ class LeidenToEpiDocConverter:
             )
             
             full_text = message.content[0].text
-            return self._parse_response(full_text)
+            result = self._parse_response(full_text)
+            
+            # Capture token usage from API response
+            usage = getattr(message, 'usage', None)
+            if usage:
+                result["input_tokens"] = getattr(usage, 'input_tokens', 0)
+                result["output_tokens"] = getattr(usage, 'output_tokens', 0)
+                result["cache_creation_input_tokens"] = getattr(usage, 'cache_creation_input_tokens', 0)
+                result["cache_read_input_tokens"] = getattr(usage, 'cache_read_input_tokens', 0)
+            
+            return result
             
         except Exception as e:
             error_msg = f"Error during conversion: {str(e)}\n{traceback.format_exc()}"
@@ -655,6 +665,7 @@ class LeidenEpiDocGUI(QMainWindow):
     TAB_NOTES = 2
     TAB_ANALYSIS = 3
     TAB_FULL_OUTPUT = 4
+    TAB_STATS = 5
     
     def __init__(self):
         super().__init__()
@@ -824,6 +835,13 @@ class LeidenEpiDocGUI(QMainWindow):
         self.full_output_text.setPlaceholderText("Convert the file to view full output...")
         self.tab_widget.addTab(self.full_output_text, "Full Output")
         
+        # Stats tab
+        self.stats_text = QTextEdit()
+        self.stats_text.setReadOnly(True)
+        self.stats_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.stats_text.setPlaceholderText("Convert the file to view token usage stats...")
+        self.tab_widget.addTab(self.stats_text, "Stats")
+        
         right_layout.addWidget(self.tab_widget)
         
         right_pane.setLayout(right_layout)
@@ -895,6 +913,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.notes_text.setLineWrapMode(mode)
         self.analysis_text.setLineWrapMode(mode)
         self.full_output_text.setLineWrapMode(mode)
+        self.stats_text.setLineWrapMode(mode)
         # Show horizontal scrollbars only if word wrap is off
         h_policy = Qt.ScrollBarAsNeeded if not enabled else Qt.ScrollBarAlwaysOff
         self.input_text.setHorizontalScrollBarPolicy(h_policy)
@@ -902,6 +921,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.notes_text.setHorizontalScrollBarPolicy(h_policy)
         self.analysis_text.setHorizontalScrollBarPolicy(h_policy)
         self.full_output_text.setHorizontalScrollBarPolicy(h_policy)
+        self.stats_text.setHorizontalScrollBarPolicy(h_policy)
     
     def load_files(self):
         """Load multiple files for batch processing"""
@@ -1023,6 +1043,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.notes_text.setPlainText("")
         self.analysis_text.setPlainText("")
         self.full_output_text.setPlainText("")
+        self.stats_text.setPlainText("")
         
         # Update button states
         self.convert_btn.setEnabled(False)
@@ -1108,6 +1129,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.notes_text.setPlainText("")
         self.analysis_text.setPlainText("")
         self.full_output_text.setPlainText("")
+        self.stats_text.setPlainText("")
         
         # Disable deselect button (no file selected now)
         self.deselect_btn.setEnabled(False)
@@ -1190,12 +1212,38 @@ class LeidenEpiDocGUI(QMainWindow):
                 if not result.get("error") and file_item.file_path not in self.missing_tags_warned:
                     QMessageBox.warning(self, "Missing Tags", self.MISSING_TAGS_WARNING)
                     self.missing_tags_warned.add(file_item.file_path)
+            
+            # Always show stats if conversion has been attempted
+            self.stats_text.setPlainText(self._format_stats(result))
         else:
             # Not yet converted
             self.epidoc_text.setPlainText("")
             self.notes_text.setPlainText("")
             self.analysis_text.setPlainText("")
             self.full_output_text.setPlainText("")
+            self.stats_text.setPlainText("")
+    
+    def _format_stats(self, result):
+        """Format token usage statistics from a conversion result."""
+        input_tokens = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+        cache_creation = result.get("cache_creation_input_tokens", 0)
+        cache_read = result.get("cache_read_input_tokens", 0)
+        total_tokens = input_tokens + output_tokens
+        
+        lines = [
+            "Token Usage",
+            "=" * 30,
+            f"Input tokens:                {input_tokens:,}",
+            f"Output tokens:               {output_tokens:,}",
+            f"Total tokens:                {total_tokens:,}",
+            "",
+            "Cache Details",
+            "-" * 30,
+            f"Cache creation tokens:       {cache_creation:,}",
+            f"Cache read tokens:           {cache_read:,}",
+        ]
+        return "\n".join(lines)
     
     def convert_selected(self):
         """Convert all checked files"""
