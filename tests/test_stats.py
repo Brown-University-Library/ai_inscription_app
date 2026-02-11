@@ -18,7 +18,7 @@ sys.modules['PySide6.QtGui'] = MagicMock()
 class TestTokenUsageCapture:
     """Test suite for capturing token usage from API responses."""
 
-    def test_get_epidoc_captures_token_usage(self):
+    def test_parse_response_with_simulated_token_usage(self):
         """Test that get_epidoc captures input_tokens and output_tokens from API response."""
         from tests.conftest import create_mock_converter
 
@@ -80,13 +80,11 @@ class TestTokenUsageCapture:
 
     def test_no_api_key_result_has_no_token_usage(self):
         """Test that result without API key doesn't include token usage."""
-        api_key = ""
-        if not api_key:
-            result = {
-                "error": "Error: API key not configured. Please set it in Settings.",
-                "full_text": "Error: API key not configured. Please set it in Settings.",
-                "has_tags": False
-            }
+        result = {
+            "error": "Error: API key not configured. Please set it in Settings.",
+            "full_text": "Error: API key not configured. Please set it in Settings.",
+            "has_tags": False
+        }
 
         assert "input_tokens" not in result
         assert "output_tokens" not in result

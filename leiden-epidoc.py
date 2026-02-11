@@ -1214,6 +1214,7 @@ class LeidenEpiDocGUI(QMainWindow):
                     self.missing_tags_warned.add(file_item.file_path)
             
             # Always show stats if conversion has been attempted
+            # (shows zeros when token data is unavailable, e.g., during errors)
             self.stats_text.setPlainText(self._format_stats(result))
         else:
             # Not yet converted
