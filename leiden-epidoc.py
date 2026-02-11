@@ -96,6 +96,8 @@ class LeidenToEpiDocConverter:
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "claude-sonnet-4-20250514")
         self.save_location = self.config.get("save_location", str(Path.home()))
+        self.max_tokens = self.config.get("max_tokens", 8192)
+        self.temperature = self.config.get("temperature", 0)
         self.last_output = ""
         # Custom prompt and examples (None means use defaults from leiden_prompts.py)
         self.custom_prompt = None
@@ -116,7 +118,9 @@ class LeidenToEpiDocConverter:
         config = {
             "api_key": self.api_key,
             "model": self.model,
-            "save_location": self.save_location
+            "save_location": self.save_location,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
@@ -147,8 +151,8 @@ class LeidenToEpiDocConverter:
             
             message = client.messages.create(
                 model=self.model,
-                max_tokens=8192,
-                temperature=0,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
                 system=prompt,
                 messages=[
                     {
@@ -238,6 +242,33 @@ class APISettingsDialog(QDialog):
         
         layout.addLayout(model_layout)
         
+        # Advanced Parameters
+        advanced_label = QLabel("Advanced Parameters")
+        advanced_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        layout.addWidget(advanced_label)
+        
+        advanced_layout = QFormLayout()
+        
+        self.max_tokens_input = QLineEdit()
+        self.max_tokens_input.setText(str(self.converter.max_tokens))
+        self.max_tokens_input.setPlaceholderText("Default: 8192")
+        self.max_tokens_input.setToolTip(
+            "Maximum number of tokens in the response. Higher values allow longer outputs.\n"
+            "Must be a positive integer. Default: 8192"
+        )
+        advanced_layout.addRow("Max Tokens:", self.max_tokens_input)
+        
+        self.temperature_input = QLineEdit()
+        self.temperature_input.setText(str(self.converter.temperature))
+        self.temperature_input.setPlaceholderText("Default: 0.0")
+        self.temperature_input.setToolTip(
+            "Controls randomness in the output. 0 = deterministic, 1.0 = most random.\n"
+            "Lower values produce more consistent results. Default: 0"
+        )
+        advanced_layout.addRow("Temperature:", self.temperature_input)
+        
+        layout.addLayout(advanced_layout)
+        
         # Buttons
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Save")
@@ -258,8 +289,38 @@ class APISettingsDialog(QDialog):
             self.api_key_input.setEchoMode(QLineEdit.Password)
     
     def save_settings(self):
+        # Validate max_tokens
+        max_tokens_text = self.max_tokens_input.text().strip()
+        if max_tokens_text:
+            try:
+                max_tokens = int(max_tokens_text)
+                if max_tokens <= 0:
+                    raise ValueError("Must be positive")
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input",
+                    "Max Tokens must be a positive integer.")
+                return
+        else:
+            max_tokens = 8192
+        
+        # Validate temperature
+        temperature_text = self.temperature_input.text().strip()
+        if temperature_text:
+            try:
+                temperature = float(temperature_text)
+                if temperature < 0.0 or temperature > 1.0:
+                    raise ValueError("Out of range")
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input",
+                    "Temperature must be a number between 0.0 and 1.0.")
+                return
+        else:
+            temperature = 0.0
+        
         self.converter.api_key = self.api_key_input.text()
         self.converter.model = self.model_input.text()
+        self.converter.max_tokens = max_tokens
+        self.converter.temperature = temperature
         self.converter.save_config()
         self.accept()
 

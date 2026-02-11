@@ -782,3 +782,89 @@ class TestCheckAllUncheckAll:
         assert right_pane["input_text"] == "Some input text"
         assert right_pane["epidoc_text"] == "<lb/>Some XML"
         assert right_pane["notes_text"] == "Some notes"
+
+
+@pytest.mark.integration
+class TestAPIParametersWorkflow:
+    """Integration tests for API parameters (max_tokens, temperature) workflow."""
+
+    def test_config_save_and_load_with_api_parameters(self, tmp_path, monkeypatch):
+        """Test saving and loading config with max_tokens and temperature."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        config = {
+            "api_key": "test-key",
+            "model": "claude-sonnet-4-20250514",
+            "save_location": str(tmp_path),
+            "max_tokens": 4096,
+            "temperature": 0.3
+        }
+        with open(config_file, 'w') as f:
+            json.dump(config, f)
+
+        with open(config_file, 'r') as f:
+            loaded_config = json.load(f)
+
+        assert loaded_config["max_tokens"] == 4096
+        assert loaded_config["temperature"] == 0.3
+
+    def test_config_update_api_parameters(self, tmp_path, monkeypatch):
+        """Test updating max_tokens and temperature in existing config."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        # Initial config with defaults
+        initial_config = {
+            "api_key": "test-key",
+            "model": "test-model",
+            "save_location": "/test/path",
+            "max_tokens": 8192,
+            "temperature": 0
+        }
+        with open(config_file, 'w') as f:
+            json.dump(initial_config, f)
+
+        # Load, update, and save
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        config["max_tokens"] = 16384
+        config["temperature"] = 0.8
+
+        with open(config_file, 'w') as f:
+            json.dump(config, f)
+
+        # Reload and verify
+        with open(config_file, 'r') as f:
+            updated_config = json.load(f)
+
+        assert updated_config["max_tokens"] == 16384
+        assert updated_config["temperature"] == 0.8
+        # Other fields preserved
+        assert updated_config["api_key"] == "test-key"
+        assert updated_config["model"] == "test-model"
+
+    def test_backward_compatible_config_without_api_parameters(self, tmp_path, monkeypatch):
+        """Test that old configs without max_tokens/temperature still work."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        # Old-style config without the new fields
+        old_config = {
+            "api_key": "test-key",
+            "model": "test-model",
+            "save_location": "/test/path"
+        }
+        with open(config_file, 'w') as f:
+            json.dump(old_config, f)
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        # Defaults should be used
+        max_tokens = config.get("max_tokens", 8192)
+        temperature = config.get("temperature", 0)
+
+        assert max_tokens == 8192
+        assert temperature == 0

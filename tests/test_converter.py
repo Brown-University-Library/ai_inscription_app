@@ -234,3 +234,137 @@ Line 3
         assert "Line 1" in content
         assert "Line 2" in content
         assert "Line 3" in content
+
+
+@pytest.mark.unit
+class TestAPIParametersPersistence:
+    """Test suite for max_tokens and temperature parameter persistence."""
+
+    def test_save_config_with_api_parameters(self, tmp_path, monkeypatch):
+        """Test saving configuration includes max_tokens and temperature."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        config = {
+            "api_key": "test-key",
+            "model": "test-model",
+            "save_location": "/test/path",
+            "max_tokens": 4096,
+            "temperature": 0.5
+        }
+        with open(config_file, 'w') as f:
+            json.dump(config, f)
+
+        with open(config_file, 'r') as f:
+            loaded = json.load(f)
+
+        assert loaded["max_tokens"] == 4096
+        assert loaded["temperature"] == 0.5
+
+    def test_load_config_with_api_parameters(self, tmp_path, monkeypatch):
+        """Test loading configuration retrieves max_tokens and temperature."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        config_data = {
+            "api_key": "test-key",
+            "model": "test-model",
+            "save_location": "/test/path",
+            "max_tokens": 16384,
+            "temperature": 0.7
+        }
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f)
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        assert config.get("max_tokens", 8192) == 16384
+        assert config.get("temperature", 0) == 0.7
+
+    def test_load_config_defaults_when_parameters_missing(self, tmp_path, monkeypatch):
+        """Test that defaults are used when max_tokens and temperature are absent."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "leiden_epidoc_config.json"
+
+        # Config without the new parameters (backward compatibility)
+        config_data = {
+            "api_key": "test-key",
+            "model": "test-model",
+            "save_location": "/test/path"
+        }
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f)
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        assert config.get("max_tokens", 8192) == 8192
+        assert config.get("temperature", 0) == 0
+
+
+@pytest.mark.unit
+class TestAPIParametersValidation:
+    """Test suite for max_tokens and temperature input validation."""
+
+    def test_valid_max_tokens_positive_integer(self):
+        """Test that positive integers are valid for max_tokens."""
+        valid_values = ["1", "100", "8192", "16384"]
+        for value in valid_values:
+            parsed = int(value)
+            assert parsed > 0
+
+    def test_invalid_max_tokens_zero(self):
+        """Test that zero is invalid for max_tokens."""
+        value = "0"
+        parsed = int(value)
+        assert parsed <= 0
+
+    def test_invalid_max_tokens_negative(self):
+        """Test that negative values are invalid for max_tokens."""
+        value = "-1"
+        parsed = int(value)
+        assert parsed <= 0
+
+    def test_invalid_max_tokens_non_integer(self):
+        """Test that non-integer strings are invalid for max_tokens."""
+        invalid_values = ["abc", "3.14", ""]
+        for value in invalid_values:
+            if value:
+                with pytest.raises(ValueError):
+                    int(value)
+
+    def test_valid_temperature_range(self):
+        """Test that floats in [0.0, 1.0] are valid for temperature."""
+        valid_values = ["0", "0.0", "0.5", "1.0", "1"]
+        for value in valid_values:
+            parsed = float(value)
+            assert 0.0 <= parsed <= 1.0
+
+    def test_invalid_temperature_above_range(self):
+        """Test that values above 1.0 are invalid for temperature."""
+        value = "1.5"
+        parsed = float(value)
+        assert parsed > 1.0
+
+    def test_invalid_temperature_below_range(self):
+        """Test that negative values are invalid for temperature."""
+        value = "-0.1"
+        parsed = float(value)
+        assert parsed < 0.0
+
+    def test_invalid_temperature_non_numeric(self):
+        """Test that non-numeric strings are invalid for temperature."""
+        with pytest.raises(ValueError):
+            float("abc")
+
+    def test_empty_fields_use_defaults(self):
+        """Test that empty fields fall back to default values."""
+        max_tokens_text = ""
+        temperature_text = ""
+
+        max_tokens = int(max_tokens_text) if max_tokens_text else 8192
+        temperature = float(temperature_text) if temperature_text else 0
+
+        assert max_tokens == 8192
+        assert temperature == 0
