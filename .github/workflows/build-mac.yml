@@ -35,7 +35,7 @@ jobs:
 
       - name: Build with Nuitka
         # Note: Using --standalone with --macos-create-app-bundle to create a proper .app bundle
-        # (macOS convention), unlike Windows which uses --onefile for a single .exe
+        # Both Windows and macOS use --standalone to avoid CrowdStrike blocking issues
         run: |
           uv run python -m nuitka \
             --standalone \
