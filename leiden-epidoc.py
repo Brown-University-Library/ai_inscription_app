@@ -261,12 +261,18 @@ class APISettingsDialog(QDialog):
         
         self.max_tokens_input = QLineEdit()
         self.max_tokens_input.setText(str(self.converter.max_tokens))
-        self.max_tokens_input.setPlaceholderText("Default: 8192")
+        self.max_tokens_input.setPlaceholderText("Default: 8192 (output tokens per document)")
         self.max_tokens_input.setToolTip(
-            "Maximum number of tokens in the response. Higher values allow longer outputs.\n"
-            "Must be a positive integer. Default: 8192"
+            "Maximum number of output tokens per document conversion.\n"
+            "This limits the length of Claude's response only — input tokens are handled automatically.\n"
+            "Setting this too low may result in truncated EpiDoc XML.\n"
+            "Recommended minimum: 1024. Default: 8192"
         )
-        advanced_layout.addRow("Max Tokens:", self.max_tokens_input)
+        advanced_layout.addRow("Max Output Tokens:", self.max_tokens_input)
+        
+        max_tokens_note = QLabel("⚠ Controls output length only. Too low may truncate results.")
+        max_tokens_note.setStyleSheet("color: gray; font-size: 11px; margin-left: 5px;")
+        advanced_layout.addRow("", max_tokens_note)
         
         self.temperature_input = QLineEdit()
         self.temperature_input.setText(str(self.converter.temperature))
@@ -308,10 +314,17 @@ class APISettingsDialog(QDialog):
                     raise ValueError("Must be positive")
             except ValueError:
                 QMessageBox.warning(self, "Invalid Input",
-                    "Max Tokens must be a positive integer.")
+                    "Max Output Tokens must be a positive integer.")
                 return
         else:
             max_tokens = 8192
+        
+        # Warn if max_tokens is below recommended minimum (non-blocking)
+        if max_tokens < 1024:
+            QMessageBox.warning(self, "Low Output Token Limit",
+                "The Max Output Tokens value is below the recommended minimum of 1024.\n"
+                "This may result in truncated EpiDoc XML output for longer documents.\n\n"
+                "The setting will be saved, but consider increasing it if you experience truncated results.")
         
         # Validate temperature
         temperature_text = self.temperature_input.text().strip()
