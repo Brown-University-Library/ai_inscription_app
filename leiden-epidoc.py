@@ -191,7 +191,7 @@ class LeidenToEpiDocConverter:
             if e.status_code == 402 or error_type == "billing_error":
                 error_msg = (
                     "Your Anthropic API credit has been exhausted. "
-                    "Please top up your account at console.anthropic.com → Billing."
+                    "Please visit your Anthropic account's billing settings to add credit."
                 )
                 return {
                     "error": error_msg,

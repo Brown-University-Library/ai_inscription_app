@@ -446,7 +446,7 @@ class TestCreditExhaustionErrorHandling:
         # Verify the expected result structure
         error_msg = (
             "Your Anthropic API credit has been exhausted. "
-            "Please top up your account at console.anthropic.com → Billing."
+            "Please visit your Anthropic account's billing settings to add credit."
         )
         result = {
             "error": error_msg,
@@ -456,7 +456,7 @@ class TestCreditExhaustionErrorHandling:
         }
 
         assert "credit has been exhausted" in result["error"]
-        assert "console.anthropic.com" in result["error"]
+        assert "billing" in result["error"].lower()
         assert result["is_credit_error"] is True
         assert result["has_tags"] is False
         # Ensure no traceback in the message
@@ -524,12 +524,12 @@ class TestCreditExhaustionErrorHandling:
         """Test that the credit error message contains actionable instructions."""
         error_msg = (
             "Your Anthropic API credit has been exhausted. "
-            "Please top up your account at console.anthropic.com → Billing."
+            "Please visit your Anthropic account's billing settings to add credit."
         )
 
-        assert "console.anthropic.com" in error_msg
-        assert "Billing" in error_msg
-        assert "top up" in error_msg
+        assert "billing" in error_msg.lower()
+        assert "credit" in error_msg.lower()
+        assert "exhausted" in error_msg
 
     def test_billing_error_with_none_body(self):
         """Test handling when APIStatusError body is None."""
