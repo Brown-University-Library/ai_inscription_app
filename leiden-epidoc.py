@@ -270,7 +270,7 @@ class APISettingsDialog(QDialog):
         )
         advanced_layout.addRow("Max Output Tokens:", self.max_tokens_input)
         
-        max_tokens_note = QLabel("⚠ Controls output length only. Too low may truncate results.")
+        max_tokens_note = QLabel("⚠ Applies per document. Too low may truncate results.")
         max_tokens_note.setStyleSheet("color: gray; font-size: 11px; margin-left: 5px;")
         advanced_layout.addRow("", max_tokens_note)
         
