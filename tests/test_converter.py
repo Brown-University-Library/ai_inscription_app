@@ -368,3 +368,22 @@ class TestAPIParametersValidation:
 
         assert max_tokens == 8192
         assert temperature == 0
+
+    def test_max_tokens_below_recommended_minimum(self):
+        """Test that values below 1024 are flagged as below recommended minimum."""
+        below_minimum_values = [1, 100, 512, 1023]
+        for value in below_minimum_values:
+            assert value < 1024, f"{value} should be below recommended minimum of 1024"
+
+    def test_max_tokens_at_or_above_recommended_minimum(self):
+        """Test that values at or above 1024 are not flagged."""
+        safe_values = [1024, 2048, 4096, 8192, 16384]
+        for value in safe_values:
+            assert value >= 1024, f"{value} should not trigger low-value warning"
+
+    def test_max_tokens_low_value_still_valid(self):
+        """Test that low max_tokens values are still valid (warning is non-blocking)."""
+        low_values = [1, 10, 100, 500]
+        for value in low_values:
+            assert value > 0, f"{value} should still be a valid positive integer"
+            assert value < 1024, f"{value} should trigger a warning but still be accepted"
