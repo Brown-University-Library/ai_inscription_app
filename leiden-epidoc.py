@@ -263,9 +263,11 @@ class APISettingsDialog(QDialog):
         self.max_tokens_input.setText(str(self.converter.max_tokens))
         self.max_tokens_input.setPlaceholderText("Default: 8192 (output tokens per document)")
         self.max_tokens_input.setToolTip(
-            "Maximum number of output tokens per document conversion.\n"
-            "This limits the length of Claude's response only — input tokens are handled automatically.\n"
-            "Setting this too low may result in truncated EpiDoc XML.\n"
+            "Sets the maximum length of Claude's response per document.\n"
+            "This is a hard cutoff — if the response exceeds this limit, the output will be truncated.\n"
+            "It does not affect verbosity or style; it only caps how much text Claude is allowed to return.\n"
+            "A higher value does not waste tokens — you are only billed for what Claude actually generates.\n"
+            "Input tokens are handled automatically and are not affected by this setting.\n"
             "Recommended minimum: 1024. Default: 8192"
         )
         advanced_layout.addRow("Max Output Tokens:", self.max_tokens_input)
