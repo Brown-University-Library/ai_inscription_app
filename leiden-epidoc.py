@@ -180,6 +180,28 @@ class LeidenToEpiDocConverter:
             
             return result
             
+        except anthropic.APIStatusError as e:
+            # Detect credit/billing errors (HTTP 402 or billing_error type)
+            error_type = None
+            if isinstance(e.body, dict):
+                error_info = e.body.get("error", {})
+                if isinstance(error_info, dict):
+                    error_type = error_info.get("type")
+            
+            if e.status_code == 402 or error_type == "billing_error":
+                error_msg = (
+                    "Your Anthropic API credit has been exhausted. "
+                    "Please visit your Anthropic account's billing settings to add credit."
+                )
+                return {
+                    "error": error_msg,
+                    "full_text": error_msg,
+                    "has_tags": False,
+                    "is_credit_error": True
+                }
+            
+            # Re-raise non-billing API status errors to be caught by generic handler
+            raise
         except Exception as e:
             error_msg = f"Error during conversion: {str(e)}\n{traceback.format_exc()}"
             return {
