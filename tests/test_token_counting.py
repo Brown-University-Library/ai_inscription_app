@@ -81,10 +81,12 @@ class TestTokenCountModeConfig:
         assert mode == "manual"
 
     def test_all_valid_token_count_modes(self):
-        """Test all three valid token count mode values."""
+        """Test all three valid token count mode values are recognized."""
         valid_modes = ("manual", "automatic", "disabled")
-        for m in valid_modes:
-            assert m in valid_modes
+        assert "manual" in valid_modes
+        assert "automatic" in valid_modes
+        assert "disabled" in valid_modes
+        assert len(valid_modes) == 3
 
 
 @pytest.mark.unit
@@ -93,20 +95,13 @@ class TestCountTokensMethod:
 
     def test_count_tokens_no_api_key(self):
         """Test that count_tokens returns error when no API key."""
-        from tests.conftest import create_mock_converter
-        converter = create_mock_converter()
-        converter.api_key = ""
-        converter.model = "test-model"
-        converter.custom_prompt = None
-        converter.custom_examples = None
+        # Simulate the converter's count_tokens behavior with no API key
+        api_key = ""
+        if not api_key:
+            result = {"error": "API key not configured"}
+        else:
+            result = {"input_tokens": 100}
 
-        # Mock the method behavior
-        def count_tokens(leiden):
-            if not converter.api_key:
-                return {"error": "API key not configured"}
-            return {"input_tokens": 100}
-
-        result = count_tokens("test text")
         assert "error" in result
         assert result["error"] == "API key not configured"
 

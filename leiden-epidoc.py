@@ -1956,7 +1956,6 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def show_api_settings(self):
         old_model = self.converter.model
-        old_mode = self.converter.token_count_mode
         dialog = APISettingsDialog(self, self.converter)
         if dialog.exec():
             self.status_label.setText("API settings saved.")
