@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QAbstractItemView, QGridLayout
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QColor, QFont
 
 # Configuration file path
 CONFIG_FILE = "leiden_epidoc_config.json"
@@ -177,6 +177,10 @@ class LeidenToEpiDocConverter:
                 result["output_tokens"] = getattr(usage, 'output_tokens', 0)
                 result["cache_creation_input_tokens"] = getattr(usage, 'cache_creation_input_tokens', 0)
                 result["cache_read_input_tokens"] = getattr(usage, 'cache_read_input_tokens', 0)
+            
+            # Capture stop reason for truncation detection
+            result["stop_reason"] = getattr(message, 'stop_reason', None)
+            result["truncated"] = (result["stop_reason"] == "max_tokens")
             
             return result
             
@@ -712,6 +716,7 @@ class LeidenEpiDocGUI(QMainWindow):
         self.file_items = {}  # Dictionary mapping file_path to FileItem
         self.current_file_item = None  # Currently selected file
         self.missing_tags_warned = set()  # Track files that have shown the missing tags warning
+        self.truncation_warned = set()  # Track files that have shown the truncation warning
         self.setup_ui()
     
     def setup_ui(self):
@@ -1074,6 +1079,9 @@ class LeidenEpiDocGUI(QMainWindow):
         # Clear the missing tags warning tracking
         self.missing_tags_warned.clear()
         
+        # Clear the truncation warning tracking
+        self.truncation_warned.clear()
+        
         # Clear all right-hand panes
         self.input_text.setPlainText("")
         self.epidoc_text.setPlainText("")
@@ -1253,6 +1261,20 @@ class LeidenEpiDocGUI(QMainWindow):
             # Always show stats if conversion has been attempted
             # (shows zeros when token data is unavailable, e.g., during errors)
             self.stats_text.setPlainText(self._format_stats(result))
+            
+            # Show truncation warning if output was cut off by token limit
+            if result.get("truncated"):
+                self.status_label.setText("⚠ Output truncated — token limit reached")
+                # Only show warning dialog once per file
+                if file_item.file_path not in self.truncation_warned:
+                    QMessageBox.warning(
+                        self,
+                        "Output Truncated",
+                        "The output was truncated because it reached the maximum token limit. "
+                        "The EpiDoc XML may be incomplete or malformed.\n\n"
+                        "To fix this, increase the Max Output Tokens value in Settings."
+                    )
+                    self.truncation_warned.add(file_item.file_path)
         else:
             # Not yet converted
             self.epidoc_text.setPlainText("")
@@ -1281,6 +1303,16 @@ class LeidenEpiDocGUI(QMainWindow):
             f"Cache creation tokens:       {cache_creation:,}",
             f"Cache read tokens:           {cache_read:,}",
         ]
+        
+        # Show truncation status if stop_reason is available
+        stop_reason = result.get("stop_reason")
+        if stop_reason is not None:
+            truncated = result.get("truncated", False)
+            lines.append("")
+            lines.append("Completion Details")
+            lines.append("-" * 30)
+            lines.append(f"Token Limit Reached:         {'Yes' if truncated else 'No'}")
+        
         return "\n".join(lines)
     
     def convert_selected(self):
@@ -1344,6 +1376,7 @@ class LeidenEpiDocGUI(QMainWindow):
         """Update table to show 'In Progress' for the file being converted"""
         # Clear warning tracking for this file so user gets warned again if re-conversion also has missing tags
         self.missing_tags_warned.discard(file_path)
+        self.truncation_warned.discard(file_path)
         for row in range(self.file_table.rowCount()):
             filename_item = self.file_table.item(row, 1)
             if filename_item and filename_item.data(Qt.UserRole) == file_path:
@@ -1377,6 +1410,9 @@ class LeidenEpiDocGUI(QMainWindow):
                 if status_item:
                     if file_item.has_error:
                         status_item.setText("✗ Error")
+                    elif result.get("truncated"):
+                        status_item.setText("⚠ Truncated")
+                        status_item.setForeground(QColor("#FF8C00"))  # Dark orange
                     else:
                         status_item.setText("✓ Converted")
                 # Uncheck the file after conversion
@@ -1392,6 +1428,15 @@ class LeidenEpiDocGUI(QMainWindow):
         """Handle batch conversion completion"""
         self.convert_btn.setEnabled(True)
         self.conversion_thread = None
+        
+        # Collect truncated files for batch summary dialog
+        truncated_files = []
+        for file_path, file_item in self.file_items.items():
+            if (file_item.is_converted and file_item.conversion_result
+                    and file_item.conversion_result.get("truncated")):
+                truncated_files.append(file_item.file_name)
+                # Mark as warned so _display_file_content won't show a per-file dialog
+                self.truncation_warned.add(file_path)
         
         if result.get("success"):
             count = result.get("converted_count", 0)
@@ -1431,6 +1476,18 @@ class LeidenEpiDocGUI(QMainWindow):
             # Refresh the display if a file is currently selected
             if self.current_file_item:
                 self._display_file_content(self.current_file_item)
+        
+        # Show batch truncation summary dialog if any files were truncated
+        if truncated_files:
+            file_list = "\n".join(f"• {name}" for name in truncated_files)
+            QMessageBox.warning(
+                self,
+                "Output Truncated",
+                f"The following {len(truncated_files)} file(s) were truncated due to the "
+                f"token limit:\n\n{file_list}\n\n"
+                "The EpiDoc XML may be incomplete or malformed. "
+                "To fix this, increase the Max Output Tokens value in Settings."
+            )
         
         # Update selection button states after conversion
         self._update_selection_button_states()
