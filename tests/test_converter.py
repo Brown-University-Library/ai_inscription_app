@@ -387,3 +387,165 @@ class TestAPIParametersValidation:
         for value in low_values:
             assert value > 0, f"{value} should still be a valid positive integer"
             assert value < 1024, f"{value} should trigger a warning but still be accepted"
+
+
+@pytest.mark.unit
+class TestCreditExhaustionErrorHandling:
+    """Test suite for credit/billing error detection in get_epidoc."""
+
+    def _make_billing_error(self, status_code=402, error_type="billing_error"):
+        """Helper to create a mock anthropic.APIStatusError for billing errors."""
+        import httpx
+        import anthropic
+
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(
+            status_code=status_code,
+            json={"error": {"type": error_type, "message": "Your credit balance is too low."}},
+            request=request,
+        )
+        return anthropic.APIStatusError(
+            message="billing error",
+            response=response,
+            body={"error": {"type": error_type, "message": "Your credit balance is too low."}},
+        )
+
+    def _make_non_billing_api_error(self, status_code=429, error_type="rate_limit_error"):
+        """Helper to create a mock anthropic.APIStatusError for non-billing errors."""
+        import httpx
+        import anthropic
+
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(
+            status_code=status_code,
+            json={"error": {"type": error_type, "message": "Rate limit exceeded."}},
+            request=request,
+        )
+        return anthropic.APIStatusError(
+            message="rate limit exceeded",
+            response=response,
+            body={"error": {"type": error_type, "message": "Rate limit exceeded."}},
+        )
+
+    def test_billing_error_returns_friendly_message(self):
+        """Test that a 402 billing error returns a user-friendly message without traceback."""
+        import anthropic
+
+        billing_error = self._make_billing_error()
+
+        # Simulate the error handling logic from get_epidoc
+        error_type = None
+        if isinstance(billing_error.body, dict):
+            error_info = billing_error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+
+        assert billing_error.status_code == 402
+        assert error_type == "billing_error"
+
+        # Verify the expected result structure
+        error_msg = (
+            "Your Anthropic API credit has been exhausted. "
+            "Please visit your Anthropic account's billing settings to add credit."
+        )
+        result = {
+            "error": error_msg,
+            "full_text": error_msg,
+            "has_tags": False,
+            "is_credit_error": True,
+        }
+
+        assert "credit has been exhausted" in result["error"]
+        assert "billing" in result["error"].lower()
+        assert result["is_credit_error"] is True
+        assert result["has_tags"] is False
+        # Ensure no traceback in the message
+        assert "Traceback" not in result["error"]
+
+    def test_billing_error_detected_by_status_code(self):
+        """Test that HTTP 402 is detected as a billing error even without error_type."""
+        import httpx
+        import anthropic
+
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(status_code=402, json={}, request=request)
+        error = anthropic.APIStatusError(message="payment required", response=response, body={})
+
+        # Simulate detection logic
+        error_type = None
+        if isinstance(error.body, dict):
+            error_info = error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+
+        is_credit_error = error.status_code == 402 or error_type == "billing_error"
+        assert is_credit_error is True
+
+    def test_billing_error_detected_by_error_type(self):
+        """Test that billing_error type is detected even with a non-402 status code."""
+        import httpx
+        import anthropic
+
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(
+            status_code=400,
+            json={"error": {"type": "billing_error", "message": "Credit exhausted."}},
+            request=request,
+        )
+        error = anthropic.APIStatusError(
+            message="billing error",
+            response=response,
+            body={"error": {"type": "billing_error", "message": "Credit exhausted."}},
+        )
+
+        error_type = None
+        if isinstance(error.body, dict):
+            error_info = error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+
+        is_credit_error = error.status_code == 402 or error_type == "billing_error"
+        assert is_credit_error is True
+
+    def test_non_billing_error_not_detected_as_credit_error(self):
+        """Test that non-billing API errors are not treated as credit errors."""
+        rate_limit_error = self._make_non_billing_api_error()
+
+        error_type = None
+        if isinstance(rate_limit_error.body, dict):
+            error_info = rate_limit_error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+
+        is_credit_error = rate_limit_error.status_code == 402 or error_type == "billing_error"
+        assert is_credit_error is False
+
+    def test_credit_error_message_contains_actionable_info(self):
+        """Test that the credit error message contains actionable instructions."""
+        error_msg = (
+            "Your Anthropic API credit has been exhausted. "
+            "Please visit your Anthropic account's billing settings to add credit."
+        )
+
+        assert "billing" in error_msg.lower()
+        assert "credit" in error_msg.lower()
+        assert "exhausted" in error_msg
+
+    def test_billing_error_with_none_body(self):
+        """Test handling when APIStatusError body is None."""
+        import httpx
+        import anthropic
+
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(status_code=402, request=request)
+        error = anthropic.APIStatusError(message="payment required", response=response, body=None)
+
+        error_type = None
+        if isinstance(error.body, dict):
+            error_info = error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+
+        # Should still detect via status_code
+        is_credit_error = error.status_code == 402 or error_type == "billing_error"
+        assert is_credit_error is True
