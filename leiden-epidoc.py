@@ -185,14 +185,22 @@ class LeidenToEpiDocConverter:
             return result
             
         except anthropic.APIStatusError as e:
-            # Detect credit/billing errors (HTTP 402 or billing_error type)
+            # Detect credit/billing errors (HTTP 402, billing_error type,
+            # or credit-balance messages in invalid_request_error)
             error_type = None
+            error_message = ""
             if isinstance(e.body, dict):
                 error_info = e.body.get("error", {})
                 if isinstance(error_info, dict):
                     error_type = error_info.get("type")
+                    error_message = error_info.get("message", "")
             
-            if e.status_code == 402 or error_type == "billing_error":
+            is_credit_error = (
+                e.status_code == 402
+                or error_type == "billing_error"
+                or "credit balance is too low" in error_message.lower()
+            )
+            if is_credit_error:
                 error_msg = (
                     "Your Anthropic API credit has been exhausted. "
                     "Please visit your Anthropic account's billing settings to add credit."

@@ -507,17 +507,60 @@ class TestCreditExhaustionErrorHandling:
         is_credit_error = error.status_code == 402 or error_type == "billing_error"
         assert is_credit_error is True
 
+    def test_credit_balance_too_low_detected_as_credit_error(self):
+        """Test that a 400 invalid_request_error with 'credit balance is too low' message
+        is detected as a credit error (real-world Anthropic error format)."""
+        import httpx
+        import anthropic
+
+        credit_message = (
+            "Your credit balance is too low to access the Anthropic API. "
+            "Please go to Plans & Billing to upgrade or purchase credits."
+        )
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(
+            status_code=400,
+            json={"error": {"type": "invalid_request_error", "message": credit_message}},
+            request=request,
+        )
+        error = anthropic.APIStatusError(
+            message=f"Error code: 400 - {{'type': 'error', 'error': {{'type': 'invalid_request_error', 'message': '{credit_message}'}}}}",
+            response=response,
+            body={"error": {"type": "invalid_request_error", "message": credit_message}},
+        )
+
+        error_type = None
+        error_message = ""
+        if isinstance(error.body, dict):
+            error_info = error.body.get("error", {})
+            if isinstance(error_info, dict):
+                error_type = error_info.get("type")
+                error_message = error_info.get("message", "")
+
+        is_credit_error = (
+            error.status_code == 402
+            or error_type == "billing_error"
+            or "credit balance is too low" in error_message.lower()
+        )
+        assert is_credit_error is True
+
     def test_non_billing_error_not_detected_as_credit_error(self):
         """Test that non-billing API errors are not treated as credit errors."""
         rate_limit_error = self._make_non_billing_api_error()
 
         error_type = None
+        error_message = ""
         if isinstance(rate_limit_error.body, dict):
             error_info = rate_limit_error.body.get("error", {})
             if isinstance(error_info, dict):
                 error_type = error_info.get("type")
+                error_message = error_info.get("message", "")
 
-        is_credit_error = rate_limit_error.status_code == 402 or error_type == "billing_error"
+        is_credit_error = (
+            rate_limit_error.status_code == 402
+            or error_type == "billing_error"
+            or "credit balance is too low" in error_message.lower()
+        )
         assert is_credit_error is False
 
     def test_credit_error_message_contains_actionable_info(self):
