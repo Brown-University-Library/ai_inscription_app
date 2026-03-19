@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QGridLayout
+    QHeaderView, QAbstractItemView, QGridLayout, QComboBox
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QColor, QFont
@@ -37,6 +37,8 @@ class FileItem:
             or None if not yet converted.
         is_converted (bool): Flag indicating whether the file has been
             successfully converted to EpiDoc XML.
+        input_token_count (int | None): Pre-checked input token count from
+            the token counting API, or None if not yet counted.
     """
     
     def __init__(self, file_path: str):
@@ -46,6 +48,7 @@ class FileItem:
         self.conversion_result: dict | None = None
         self.is_converted: bool = False
         self.has_error = False  # Track if conversion failed
+        self.input_token_count: int | None = None  # Pre-checked input token count
         
     def load_content(self) -> bool:
         """Load the file content"""
@@ -85,11 +88,38 @@ class ConversionThread(QThread):
         # Emit finished signal with summary
         success = len(errors) == 0
         self.finished.emit({"success": success, "converted_count": total, "errors": errors})
+
+
+class TokenCountThread(QThread):
+    """Thread for counting input tokens in the background without blocking UI.
+    
+    Processes file items sequentially (one at a time) to respect API rate limits.
+    Emits a signal for each file when its token count completes.
+    """
+    
+    token_count_ready = Signal(str, dict)  # file_path, result dict with input_tokens or error
+    finished = Signal()
+    
+    def __init__(self, converter, file_items):
+        super().__init__()
+        self.converter = converter
+        self.file_items = file_items  # List of FileItem objects to count
+    
+    def run(self):
+        for file_item in self.file_items:
+            result = self.converter.count_tokens(file_item.input_text)
+            self.token_count_ready.emit(file_item.file_path, result)
+        self.finished.emit()
+
+
 class LeidenToEpiDocConverter:
     # Pre-compiled regex patterns for better performance
     ANALYSIS_PATTERN = re.compile(r'<analysis>(.*?)</analysis>', re.DOTALL | re.IGNORECASE)
     NOTES_PATTERN = re.compile(r'<notes>(.*?)</notes>', re.DOTALL | re.IGNORECASE)
     TRANSLATION_PATTERN = re.compile(r'<final_translation>(.*?)</final_translation>', re.DOTALL | re.IGNORECASE)
+    
+    # Valid token count mode values
+    TOKEN_COUNT_MODES = ("manual", "automatic", "disabled")
     
     def __init__(self):
         self.config = self.load_config()
@@ -98,6 +128,9 @@ class LeidenToEpiDocConverter:
         self.save_location = self.config.get("save_location", str(Path.home()))
         self.max_tokens = self.config.get("max_tokens", 8192)
         self.temperature = self.config.get("temperature", 0)
+        self.token_count_mode = self.config.get("token_count_mode", "manual")
+        if self.token_count_mode not in self.TOKEN_COUNT_MODES:
+            self.token_count_mode = "manual"
         self.last_output = ""
         # Custom prompt and examples (None means use defaults from leiden_prompts.py)
         self.custom_prompt = None
@@ -120,10 +153,34 @@ class LeidenToEpiDocConverter:
             "model": self.model,
             "save_location": self.save_location,
             "max_tokens": self.max_tokens,
-            "temperature": self.temperature
+            "temperature": self.temperature,
+            "token_count_mode": self.token_count_mode
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
+    
+    def _build_request_params(self, leiden: str) -> tuple[str, list]:
+        """Build the system prompt and messages payload used for both conversion and token counting.
+        
+        Returns:
+            tuple: (system_prompt, messages) matching the API request structure
+        """
+        prompt = self.custom_prompt if self.custom_prompt else SYSTEM_INSTRUCTION
+        examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Below are example inputs written according to the Leiden convention and the corresponding outputs in XML following the EpiDoc convention.\n{examples}\n\nHere is the text in Leiden Conventions format that you need to translate: \n\n<Input>\n{leiden}\n</Input>\n"
+                    }
+                ]
+            }
+        ]
+        
+        return prompt, messages
     
     def get_epidoc(self, leiden) -> dict:
         """Core conversion function - returns a dict with parsed sections"""
@@ -138,8 +195,7 @@ class LeidenToEpiDocConverter:
             client = anthropic.Anthropic(api_key=self.api_key)
             
             # Use custom prompt/examples if set, otherwise use defaults
-            prompt = self.custom_prompt if self.custom_prompt else SYSTEM_INSTRUCTION
-            examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
+            prompt, messages = self._build_request_params(leiden)
             
             # Debug logging to help troubleshoot
             logger.info(f"Using custom prompt: {self.custom_prompt is not None}")
@@ -154,17 +210,7 @@ class LeidenToEpiDocConverter:
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 system=prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"Below are example inputs written according to the Leiden convention and the corresponding outputs in XML following the EpiDoc convention.\n{examples}\n\nHere is the text in Leiden Conventions format that you need to translate: \n\n<Input>\n{leiden}\n</Input>\n"
-                            }
-                        ]
-                    }
-                ]
+                messages=messages
             )
             
             full_text = message.content[0].text
@@ -246,6 +292,34 @@ class LeidenToEpiDocConverter:
             result["final_translation"] = translation_match.group(1).strip()
         
         return result
+    
+    def count_tokens(self, leiden: str) -> dict:
+        """Count input tokens for a Leiden text without performing conversion.
+        
+        Uses the same model, system prompt, and messages payload as get_epidoc()
+        to get an accurate token count via Anthropic's token counting API.
+        
+        Returns:
+            dict with 'input_tokens' (int) on success, or 'error' (str) on failure
+        """
+        if not self.api_key:
+            return {"error": "API key not configured"}
+        
+        try:
+            client = anthropic.Anthropic(api_key=self.api_key)
+            prompt, messages = self._build_request_params(leiden)
+            
+            response = client.messages.count_tokens(
+                model=self.model,
+                system=prompt,
+                messages=messages
+            )
+            
+            return {"input_tokens": response.input_tokens}
+            
+        except Exception as e:
+            logger.error(f"Error counting tokens: {str(e)}")
+            return {"error": str(e)}
 
 
 class APISettingsDialog(QDialog):
@@ -321,6 +395,35 @@ class APISettingsDialog(QDialog):
         
         layout.addLayout(advanced_layout)
         
+        # Token Counting
+        token_count_label = QLabel("Token Counting")
+        token_count_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        layout.addWidget(token_count_label)
+        
+        token_count_layout = QFormLayout()
+        
+        self.token_count_mode_combo = QComboBox()
+        self.token_count_mode_combo.addItem("Manual only", "manual")
+        self.token_count_mode_combo.addItem("Always on file load", "automatic")
+        self.token_count_mode_combo.addItem("Disabled", "disabled")
+        # Set current selection from converter setting
+        mode_index = self.token_count_mode_combo.findData(self.converter.token_count_mode)
+        if mode_index >= 0:
+            self.token_count_mode_combo.setCurrentIndex(mode_index)
+        self.token_count_mode_combo.setToolTip(
+            "Controls when input token counting is performed.\n"
+            "Manual only: Use the 'Count Tokens' button to count tokens.\n"
+            "Always on file load: Automatically count tokens when files are loaded.\n"
+            "Disabled: Token counting is not available."
+        )
+        token_count_layout.addRow("Token Count Mode:", self.token_count_mode_combo)
+        
+        token_count_note = QLabel("Uses Anthropic's free token counting API. Does not consume credits.")
+        token_count_note.setStyleSheet("color: gray; font-size: 11px; margin-left: 5px;")
+        token_count_layout.addRow("", token_count_note)
+        
+        layout.addLayout(token_count_layout)
+        
         # Buttons
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Save")
@@ -380,6 +483,7 @@ class APISettingsDialog(QDialog):
         self.converter.model = self.model_input.text()
         self.converter.max_tokens = max_tokens
         self.converter.temperature = temperature
+        self.converter.token_count_mode = self.token_count_mode_combo.currentData()
         self.converter.save_config()
         self.accept()
 
@@ -720,6 +824,7 @@ class LeidenEpiDocGUI(QMainWindow):
         super().__init__()
         self.converter = LeidenToEpiDocConverter()
         self.conversion_thread = None
+        self.token_count_thread = None
         self.word_wrap_enabled = True
         self.file_items = {}  # Dictionary mapping file_path to FileItem
         self.current_file_item = None  # Currently selected file
@@ -771,11 +876,12 @@ class LeidenEpiDocGUI(QMainWindow):
         left_layout.addWidget(files_label)
         
         self.file_table = QTableWidget()
-        self.file_table.setColumnCount(3)
-        self.file_table.setHorizontalHeaderLabels(["", "Filename", "Status"])
+        self.file_table.setColumnCount(4)
+        self.file_table.setHorizontalHeaderLabels(["", "Filename", "Status", "Input Tokens"])
         self.file_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.file_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.file_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.file_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.file_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.file_table.setSelectionMode(QAbstractItemView.SingleSelection)
         # Apply custom selection styling for consistent visibility across all themes
@@ -828,6 +934,13 @@ class LeidenEpiDocGUI(QMainWindow):
         self.convert_btn.clicked.connect(self.convert_selected)
         self.convert_btn.setEnabled(False)
         button_area_layout.addWidget(self.convert_btn)
+        
+        # Count tokens button
+        self.count_tokens_btn = QPushButton("Count Tokens")
+        self.count_tokens_btn.clicked.connect(self.count_tokens_for_checked)
+        self.count_tokens_btn.setEnabled(False)
+        self.count_tokens_btn.setToolTip("Count input tokens for all checked files using Anthropic's token counting API")
+        button_area_layout.addWidget(self.count_tokens_btn)
         
         # Save button (moved from right pane)
         self.save_btn = QPushButton("Save Output of Checked Files")
@@ -909,6 +1022,9 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
+        
+        # Apply initial visibility based on token count mode
+        self._update_token_count_visibility()
     
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -1005,7 +1121,21 @@ class LeidenEpiDocGUI(QMainWindow):
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
                 self.convert_btn.setEnabled(True)
+                # Button visibility is controlled by _update_token_count_visibility();
+                # enabled state is managed separately for when the button is visible
+                if self.converter.token_count_mode != "disabled":
+                    self.count_tokens_btn.setEnabled(True)
                 self.clear_files_btn.setEnabled(True)
+                
+                # Auto-count tokens if mode is "automatic" and API key is configured
+                if (self.converter.token_count_mode == "automatic" 
+                        and self.converter.api_key):
+                    newly_loaded = [
+                        self.file_items[fp] for fp in file_paths 
+                        if fp in self.file_items
+                    ]
+                    if newly_loaded:
+                        self._start_token_counting(newly_loaded)
             else:
                 self.status_label.setText("No new files loaded")
     
@@ -1031,6 +1161,12 @@ class LeidenEpiDocGUI(QMainWindow):
         status_item.setTextAlignment(Qt.AlignCenter)
         status_item.setFlags(status_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
         self.file_table.setItem(row, 2, status_item)
+        
+        # Column 3: Input Tokens - initially empty
+        tokens_item = QTableWidgetItem("")
+        tokens_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        tokens_item.setFlags(tokens_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
+        self.file_table.setItem(row, 3, tokens_item)
         
         # Update button states after adding a file
         self._update_selection_button_states()
@@ -1075,6 +1211,12 @@ class LeidenEpiDocGUI(QMainWindow):
                               "Please wait for the conversion to complete.")
             return
         
+        # Stop any running token count thread
+        if self.token_count_thread and self.token_count_thread.isRunning():
+            self.token_count_thread.quit()
+            self.token_count_thread.wait()
+            self.token_count_thread = None
+        
         # Clear the file table
         self.file_table.setRowCount(0)
         
@@ -1100,6 +1242,7 @@ class LeidenEpiDocGUI(QMainWindow):
         
         # Update button states
         self.convert_btn.setEnabled(False)
+        self.count_tokens_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
         self.select_converted_btn.setEnabled(False)
         self.select_unconverted_btn.setEnabled(False)
@@ -1268,7 +1411,7 @@ class LeidenEpiDocGUI(QMainWindow):
             
             # Always show stats if conversion has been attempted
             # (shows zeros when token data is unavailable, e.g., during errors)
-            self.stats_text.setPlainText(self._format_stats(result))
+            self.stats_text.setPlainText(self._format_stats(result, file_item))
             
             # Show truncation warning if output was cut off by token limit
             if result.get("truncated"):
@@ -1289,9 +1432,19 @@ class LeidenEpiDocGUI(QMainWindow):
             self.notes_text.setPlainText("")
             self.analysis_text.setPlainText("")
             self.full_output_text.setPlainText("")
-            self.stats_text.setPlainText("")
+            # Show pre-checked token count even when not converted (but not when disabled)
+            if (file_item.input_token_count is not None
+                    and self.converter.token_count_mode != "disabled"):
+                lines = [
+                    "Pre-Check Token Count",
+                    "=" * 30,
+                    f"Estimated input tokens:      {file_item.input_token_count:,}",
+                ]
+                self.stats_text.setPlainText("\n".join(lines))
+            else:
+                self.stats_text.setPlainText("")
     
-    def _format_stats(self, result):
+    def _format_stats(self, result, file_item=None):
         """Format token usage statistics from a conversion result."""
         input_tokens = result.get("input_tokens", 0)
         output_tokens = result.get("output_tokens", 0)
@@ -1299,7 +1452,17 @@ class LeidenEpiDocGUI(QMainWindow):
         cache_read = result.get("cache_read_input_tokens", 0)
         total_tokens = input_tokens + output_tokens
         
-        lines = [
+        lines = []
+        
+        # Show pre-checked input token count if available and token counting is not disabled
+        if (file_item and file_item.input_token_count is not None
+                and self.converter.token_count_mode != "disabled"):
+            lines.append("Pre-Check Token Count")
+            lines.append("=" * 30)
+            lines.append(f"Estimated input tokens:      {file_item.input_token_count:,}")
+            lines.append("")
+        
+        lines.extend([
             "Token Usage",
             "=" * 30,
             f"Input tokens:                {input_tokens:,}",
@@ -1310,7 +1473,7 @@ class LeidenEpiDocGUI(QMainWindow):
             "-" * 30,
             f"Cache creation tokens:       {cache_creation:,}",
             f"Cache read tokens:           {cache_read:,}",
-        ]
+        ])
         
         # Show truncation status if stop_reason is available
         stop_reason = result.get("stop_reason")
@@ -1322,6 +1485,118 @@ class LeidenEpiDocGUI(QMainWindow):
             lines.append(f"Token Limit Reached:         {'Yes' if truncated else 'No'}")
         
         return "\n".join(lines)
+    
+    def count_tokens_for_checked(self):
+        """Count input tokens for all checked files"""
+        if self.converter.token_count_mode == "disabled":
+            return
+        
+        # Guard against starting while already counting
+        if self.token_count_thread and self.token_count_thread.isRunning():
+            return
+        
+        selected_items = []
+        for row in range(self.file_table.rowCount()):
+            checkbox_item = self.file_table.item(row, 0)
+            filename_item = self.file_table.item(row, 1)
+            if checkbox_item and checkbox_item.checkState() == Qt.Checked and filename_item:
+                file_path = filename_item.data(Qt.UserRole)
+                if file_path in self.file_items:
+                    selected_items.append(self.file_items[file_path])
+        
+        if not selected_items:
+            QMessageBox.warning(self, "No Files Checked",
+                              "Please check at least one file to count tokens.")
+            return
+        
+        self._start_token_counting(selected_items)
+    
+    def _start_token_counting(self, file_items_list):
+        """Start background token counting for the given file items"""
+        if self.token_count_thread and self.token_count_thread.isRunning():
+            return
+        
+        # Mark files as counting in the table
+        for file_item in file_items_list:
+            for row in range(self.file_table.rowCount()):
+                filename_item = self.file_table.item(row, 1)
+                if filename_item and filename_item.data(Qt.UserRole) == file_item.file_path:
+                    tokens_item = self.file_table.item(row, 3)
+                    if tokens_item:
+                        tokens_item.setText("...")
+                    break
+        
+        self.count_tokens_btn.setEnabled(False)
+        self.status_label.setText(f"Counting tokens for {len(file_items_list)} file(s)...")
+        
+        self.token_count_thread = TokenCountThread(self.converter, file_items_list)
+        self.token_count_thread.token_count_ready.connect(self.on_token_count_ready)
+        self.token_count_thread.finished.connect(self.on_token_count_finished)
+        self.token_count_thread.start()
+    
+    def on_token_count_ready(self, file_path, result):
+        """Handle token count result for a single file"""
+        if file_path in self.file_items:
+            file_item = self.file_items[file_path]
+            if result.get("error"):
+                file_item.input_token_count = None
+            else:
+                file_item.input_token_count = result.get("input_tokens")
+        
+        # Update the table
+        for row in range(self.file_table.rowCount()):
+            filename_item = self.file_table.item(row, 1)
+            if filename_item and filename_item.data(Qt.UserRole) == file_path:
+                tokens_item = self.file_table.item(row, 3)
+                if tokens_item:
+                    if result.get("error"):
+                        tokens_item.setText("Error")
+                    else:
+                        count = result.get("input_tokens", 0)
+                        tokens_item.setText(f"{count:,}")
+                break
+        
+        # Refresh stats display if this file is currently selected
+        if (self.current_file_item and self.current_file_item.file_path == file_path):
+            self._display_file_content(self.current_file_item)
+    
+    def on_token_count_finished(self):
+        """Handle token counting batch completion"""
+        self.token_count_thread = None
+        if self.converter.token_count_mode != "disabled":
+            self.count_tokens_btn.setEnabled(self.file_table.rowCount() > 0)
+        self.status_label.setText("Token counting complete")
+    
+    def _clear_all_token_counts(self):
+        """Clear all pre-checked token counts (e.g., when model or prompt changes)"""
+        for file_item in self.file_items.values():
+            file_item.input_token_count = None
+        for row in range(self.file_table.rowCount()):
+            tokens_item = self.file_table.item(row, 3)
+            if tokens_item:
+                tokens_item.setText("")
+    
+    def _update_token_count_visibility(self):
+        """Show or hide all token-counting UI elements based on the current token_count_mode setting.
+        
+        When disabled: hides the Input Tokens column and Count Tokens button,
+        and clears any previously fetched token counts.
+        When active (manual/automatic): shows the column and button.
+        """
+        is_disabled = self.converter.token_count_mode == "disabled"
+        
+        # Hide/show the Input Tokens column (column 3)
+        self.file_table.setColumnHidden(3, is_disabled)
+        
+        # Hide/show the Count Tokens button
+        self.count_tokens_btn.setVisible(not is_disabled)
+        
+        if is_disabled:
+            # Clear all token counts when switching to disabled
+            self._clear_all_token_counts()
+            # Refresh stats display if a file is currently selected
+            if self.current_file_item:
+                self._display_file_content(self.current_file_item)
     
     def convert_selected(self):
         """Convert all checked files"""
@@ -1716,9 +1991,17 @@ class LeidenEpiDocGUI(QMainWindow):
                                       f"{skipped_msg}")
     
     def show_api_settings(self):
+        old_model = self.converter.model
         dialog = APISettingsDialog(self, self.converter)
         if dialog.exec():
             self.status_label.setText("API settings saved.")
+            # Clear token counts if model changed (counts depend on model)
+            if self.converter.model != old_model:
+                self._clear_all_token_counts()
+            # Update token counting UI visibility and button state
+            self._update_token_count_visibility()
+            if self.converter.token_count_mode != "disabled":
+                self.count_tokens_btn.setEnabled(self.file_table.rowCount() > 0)
     
     def show_save_location_settings(self):
         dialog = SaveLocationDialog(self, self.converter)
@@ -1727,6 +2010,7 @@ class LeidenEpiDocGUI(QMainWindow):
     
     def show_prompt_editor(self):
         """Show the prompt editor dialog"""
+        old_prompt = self.converter.custom_prompt
         dialog = PromptEditorDialog(self, self.converter)
         if dialog.exec():
             # Update status to show whether custom prompt is active
@@ -1734,9 +2018,13 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.status_label.setText("Custom prompt is now active and will be used for conversions.")
             else:
                 self.status_label.setText("Prompt settings updated.")
+            # Clear token counts if prompt changed (counts depend on system prompt)
+            if self.converter.custom_prompt != old_prompt:
+                self._clear_all_token_counts()
     
     def show_examples_editor(self):
         """Show the examples editor dialog"""
+        old_examples = self.converter.custom_examples
         dialog = ExamplesEditorDialog(self, self.converter)
         if dialog.exec():
             # Update status to show whether custom examples are active
@@ -1744,6 +2032,9 @@ class LeidenEpiDocGUI(QMainWindow):
                 self.status_label.setText("Custom examples are now active and will be used for conversions.")
             else:
                 self.status_label.setText("Examples settings updated.")
+            # Clear token counts if examples changed (counts depend on examples text)
+            if self.converter.custom_examples != old_examples:
+                self._clear_all_token_counts()
 
 
 def main():
