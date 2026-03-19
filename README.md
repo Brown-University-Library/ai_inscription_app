@@ -26,15 +26,17 @@ Download the latest release for your platform from the [Releases page](https://g
 
 | Platform | File | Instructions |
 |----------|------|--------------|
-| **Windows** | `LeidenToEpiDoc.exe` | Download and run directly |
+| **Windows** | `LeidenToEpiDoc-Windows.zip` | Download, unzip, and run the `.exe` |
 | **macOS** | `LeidenToEpiDoc-Mac.zip` | Download, unzip, and open the `.app` |
 
 ### Windows
 
-1. Download `LeidenToEpiDoc.exe` from the [latest release](https://github.com/Brown-University-Library/ai_inscription_app/releases/latest)
-2. Double-click the downloaded file to run the application
-3. If Windows SmartScreen appears, click **More info** → **Run anyway** (the app is not code-signed)
+1. Download `LeidenToEpiDoc-Windows.zip` from the [latest release](https://github.com/Brown-University-Library/ai_inscription_app/releases/latest)
+2. Extract the ZIP file to a folder (e.g., right-click → **Extract All…**)
+3. Open the extracted folder and double-click `LeidenToEpiDoc.exe` to run the application
 4. On first launch, go to **Settings → Configure API** and enter your [Anthropic API key](https://console.anthropic.com/)
+
+> **Windows SmartScreen**: Since the app is not code-signed, Windows may show a "Windows protected your PC" warning on first launch. Click **More info** → **Run anyway** to proceed.
 
 ### macOS
 
@@ -45,25 +47,6 @@ Download the latest release for your platform from the [Releases page](https://g
 5. On first launch, go to **Settings → Configure API** and enter your [Anthropic API key](https://console.anthropic.com/)
 
 > **Note**: You will need an Anthropic API key to use this application. Get one at [console.anthropic.com](https://console.anthropic.com/).
-
-### Antivirus / Endpoint Protection (CrowdStrike)
-
-Some endpoint protection software (notably **CrowdStrike Falcon**) may flag or quarantine `LeidenToEpiDoc.exe`. This is a **false positive** caused by the self-extracting archive format used by Nuitka `--onefile` builds — it is not malicious software.
-
-**If the executable is blocked or deleted:**
-
-1. **Contact your IT administrator** and ask them to add an exclusion for `LeidenToEpiDoc.exe`. Provide the following details:
-   - **Application name**: Leiden to EpiDoc Converter
-   - **Publisher**: Brown University Library
-   - **Source**: [GitHub Releases](https://github.com/Brown-University-Library/ai_inscription_app/releases)
-   - **SHA-256 hash**: Can be obtained from the release page or by running `certutil -hashfile LeidenToEpiDoc.exe SHA256` in Command Prompt
-
-2. **For CrowdStrike Falcon specifically**, the IT admin can:
-   - Add a **Machine Learning exclusion** in the Falcon console under *Configuration → Prevention Policy → Machine Learning* for the file path or SHA-256 hash
-   - Add a **Custom IOC** with action set to "Allow" for the file's SHA-256 hash under *Endpoint Security → Custom IOCs*
-   - Submit the file to CrowdStrike for analysis to have it formally whitelisted
-
-3. **Alternative**: Run the application from source (see [Installation from Source](#installation-from-source) below) which avoids the packaged executable entirely.
 
 ---
 
