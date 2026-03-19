@@ -1113,6 +1113,8 @@ class LeidenEpiDocGUI(QMainWindow):
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
                 self.convert_btn.setEnabled(True)
+                # Button visibility is controlled by _update_token_count_visibility();
+                # enabled state is managed separately for when the button is visible
                 if self.converter.token_count_mode != "disabled":
                     self.count_tokens_btn.setEnabled(True)
                 self.clear_files_btn.setEnabled(True)
