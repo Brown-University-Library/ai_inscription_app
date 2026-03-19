@@ -1014,6 +1014,9 @@ class LeidenEpiDocGUI(QMainWindow):
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
+        
+        # Apply initial visibility based on token count mode
+        self._update_token_count_visibility()
     
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -1110,8 +1113,8 @@ class LeidenEpiDocGUI(QMainWindow):
             if loaded_count > 0:
                 self.status_label.setText(f"Loaded {loaded_count} file(s)")
                 self.convert_btn.setEnabled(True)
-                self.count_tokens_btn.setEnabled(
-                    self.converter.token_count_mode != "disabled")
+                if self.converter.token_count_mode != "disabled":
+                    self.count_tokens_btn.setEnabled(True)
                 self.clear_files_btn.setEnabled(True)
                 
                 # Auto-count tokens if mode is "automatic" and API key is configured
@@ -1419,8 +1422,9 @@ class LeidenEpiDocGUI(QMainWindow):
             self.notes_text.setPlainText("")
             self.analysis_text.setPlainText("")
             self.full_output_text.setPlainText("")
-            # Show pre-checked token count even when not converted
-            if file_item.input_token_count is not None:
+            # Show pre-checked token count even when not converted (but not when disabled)
+            if (file_item.input_token_count is not None
+                    and self.converter.token_count_mode != "disabled"):
                 lines = [
                     "Pre-Check Token Count",
                     "=" * 30,
@@ -1440,8 +1444,9 @@ class LeidenEpiDocGUI(QMainWindow):
         
         lines = []
         
-        # Show pre-checked input token count if available
-        if file_item and file_item.input_token_count is not None:
+        # Show pre-checked input token count if available and token counting is not disabled
+        if (file_item and file_item.input_token_count is not None
+                and self.converter.token_count_mode != "disabled"):
             lines.append("Pre-Check Token Count")
             lines.append("=" * 30)
             lines.append(f"Estimated input tokens:      {file_item.input_token_count:,}")
@@ -1548,9 +1553,8 @@ class LeidenEpiDocGUI(QMainWindow):
     def on_token_count_finished(self):
         """Handle token counting batch completion"""
         self.token_count_thread = None
-        self.count_tokens_btn.setEnabled(
-            self.converter.token_count_mode != "disabled"
-            and self.file_table.rowCount() > 0)
+        if self.converter.token_count_mode != "disabled":
+            self.count_tokens_btn.setEnabled(self.file_table.rowCount() > 0)
         self.status_label.setText("Token counting complete")
     
     def _clear_all_token_counts(self):
@@ -1561,6 +1565,28 @@ class LeidenEpiDocGUI(QMainWindow):
             tokens_item = self.file_table.item(row, 3)
             if tokens_item:
                 tokens_item.setText("")
+    
+    def _update_token_count_visibility(self):
+        """Show or hide all token-counting UI elements based on the current token_count_mode setting.
+        
+        When disabled: hides the Input Tokens column and Count Tokens button,
+        and clears any previously fetched token counts.
+        When active (manual/automatic): shows the column and button.
+        """
+        is_disabled = self.converter.token_count_mode == "disabled"
+        
+        # Hide/show the Input Tokens column (column 3)
+        self.file_table.setColumnHidden(3, is_disabled)
+        
+        # Hide/show the Count Tokens button
+        self.count_tokens_btn.setVisible(not is_disabled)
+        
+        if is_disabled:
+            # Clear all token counts when switching to disabled
+            self._clear_all_token_counts()
+            # Refresh stats display if a file is currently selected
+            if self.current_file_item:
+                self._display_file_content(self.current_file_item)
     
     def convert_selected(self):
         """Convert all checked files"""
@@ -1962,10 +1988,10 @@ class LeidenEpiDocGUI(QMainWindow):
             # Clear token counts if model changed (counts depend on model)
             if self.converter.model != old_model:
                 self._clear_all_token_counts()
-            # Update count tokens button state based on new mode
-            self.count_tokens_btn.setEnabled(
-                self.converter.token_count_mode != "disabled"
-                and self.file_table.rowCount() > 0)
+            # Update token counting UI visibility and button state
+            self._update_token_count_visibility()
+            if self.converter.token_count_mode != "disabled":
+                self.count_tokens_btn.setEnabled(self.file_table.rowCount() > 0)
     
     def show_save_location_settings(self):
         dialog = SaveLocationDialog(self, self.converter)
