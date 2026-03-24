@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog,
     QDialog, QLineEdit, QFormLayout, QMessageBox, QSplitter, QInputDialog,
     QTabWidget, QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QGridLayout, QComboBox
+    QHeaderView, QAbstractItemView, QGridLayout, QComboBox, QListWidget,
+    QListWidgetItem
 )
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QAction, QColor, QFont
@@ -110,6 +111,55 @@ class TokenCountThread(QThread):
             result = self.converter.count_tokens(file_item.input_text)
             self.token_count_ready.emit(file_item.file_path, result)
         self.finished.emit()
+
+
+class FetchModelsThread(QThread):
+    """Thread for fetching available models from the Anthropic API without blocking UI.
+    
+    Fetches all pages of models and emits the full list on completion.
+    """
+    
+    finished = Signal(list)   # list of model dicts on success
+    error = Signal(str)       # error message on failure
+    
+    def __init__(self, api_key):
+        super().__init__()
+        self.api_key = api_key
+    
+    def run(self):
+        try:
+            client = anthropic.Anthropic(api_key=self.api_key)
+            all_models = []
+            has_more = True
+            after_id = None
+            
+            while has_more:
+                kwargs = {"limit": 100}
+                if after_id:
+                    kwargs["after_id"] = after_id
+                
+                response = client.models.list(**kwargs)
+                for model in response.data:
+                    all_models.append({
+                        "id": model.id,
+                        "display_name": getattr(model, "display_name", model.id),
+                        "created_at": getattr(model, "created_at", ""),
+                    })
+                
+                has_more = response.has_more
+                if has_more and response.data:
+                    after_id = response.data[-1].id
+            
+            self.finished.emit(all_models)
+            
+        except anthropic.AuthenticationError:
+            self.error.emit("Invalid API key. Please check your API key and try again.")
+        except anthropic.APIConnectionError:
+            self.error.emit("Network error. Please check your internet connection and try again.")
+        except anthropic.APIStatusError as e:
+            self.error.emit(f"API error: {e.message}")
+        except Exception as e:
+            self.error.emit(f"Error fetching models: {str(e)}")
 
 
 class LeidenToEpiDocConverter:
@@ -360,6 +410,37 @@ class APISettingsDialog(QDialog):
         
         layout.addLayout(model_layout)
         
+        # Fetch Models button and status
+        fetch_layout = QHBoxLayout()
+        self.fetch_models_btn = QPushButton("Fetch Available Models")
+        self.fetch_models_btn.setToolTip(
+            "Retrieve available models from the Anthropic API using the API key above.\n"
+            "This also verifies that your API key is valid."
+        )
+        self.fetch_models_btn.clicked.connect(self._fetch_models)
+        fetch_layout.addWidget(self.fetch_models_btn)
+        
+        self.fetch_status_label = QLabel("")
+        self.fetch_status_label.setStyleSheet("color: gray; font-size: 11px;")
+        fetch_layout.addWidget(self.fetch_status_label)
+        fetch_layout.addStretch()
+        
+        layout.addLayout(fetch_layout)
+        
+        # Model list (hidden until models are fetched)
+        self.model_list_hint = QLabel("Click a model below to copy its ID into the Model Selection field.")
+        self.model_list_hint.setStyleSheet("color: gray; font-size: 11px;")
+        self.model_list_hint.setVisible(False)
+        layout.addWidget(self.model_list_hint)
+        
+        self.model_list = QListWidget()
+        self.model_list.setVisible(False)
+        self.model_list.setMaximumHeight(160)
+        self.model_list.itemClicked.connect(self._on_model_selected)
+        layout.addWidget(self.model_list)
+        
+        self._fetch_thread = None
+        
         # Advanced Parameters
         advanced_label = QLabel("Advanced Parameters")
         advanced_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
@@ -442,6 +523,65 @@ class APISettingsDialog(QDialog):
             self.api_key_input.setEchoMode(QLineEdit.Normal)
         else:
             self.api_key_input.setEchoMode(QLineEdit.Password)
+    
+    def _fetch_models(self):
+        """Fetch available models from the Anthropic API."""
+        api_key = self.api_key_input.text().strip()
+        if not api_key:
+            QMessageBox.warning(self, "API Key Required",
+                "Please enter an API key before fetching models.")
+            return
+        
+        self.fetch_models_btn.setEnabled(False)
+        self.fetch_models_btn.setText("Fetching...")
+        self.fetch_status_label.setText("")
+        self.fetch_status_label.setStyleSheet("color: gray; font-size: 11px;")
+        self.model_list.clear()
+        self.model_list.setVisible(False)
+        self.model_list_hint.setVisible(False)
+        
+        self._fetch_thread = FetchModelsThread(api_key)
+        self._fetch_thread.finished.connect(self._on_models_fetched)
+        self._fetch_thread.error.connect(self._on_fetch_error)
+        self._fetch_thread.start()
+    
+    def _on_models_fetched(self, models):
+        """Handle successful model list fetch."""
+        self.fetch_models_btn.setEnabled(True)
+        self.fetch_models_btn.setText("Fetch Available Models")
+        self.fetch_status_label.setText("✓ API key valid")
+        self.fetch_status_label.setStyleSheet("color: green; font-size: 11px;")
+        
+        self.model_list.clear()
+        for model in models:
+            display_name = model.get("display_name", model["id"])
+            model_id = model["id"]
+            if display_name and display_name != model_id:
+                label = f"{display_name} — {model_id}"
+            else:
+                label = model_id
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, model_id)
+            self.model_list.addItem(item)
+        
+        if self.model_list.count() > 0:
+            self.model_list.setVisible(True)
+            self.model_list_hint.setVisible(True)
+    
+    def _on_fetch_error(self, error_message):
+        """Handle model fetch error."""
+        self.fetch_models_btn.setEnabled(True)
+        self.fetch_models_btn.setText("Fetch Available Models")
+        self.fetch_status_label.setText("")
+        self.model_list.setVisible(False)
+        self.model_list_hint.setVisible(False)
+        QMessageBox.warning(self, "Fetch Models Failed", error_message)
+    
+    def _on_model_selected(self, item):
+        """Copy the selected model ID into the model input field."""
+        model_id = item.data(Qt.UserRole)
+        if model_id:
+            self.model_input.setText(model_id)
     
     def save_settings(self):
         # Validate max_tokens
