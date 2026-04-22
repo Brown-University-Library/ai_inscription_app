@@ -75,7 +75,9 @@ sys.modules['PySide6.QtCore'] = dummy_core
 sys.modules['PySide6.QtGui'] = dummy_gui
 
 
-MODULE_PATH = next(Path(__file__).resolve().parents[1].glob("leiden-*.py"))
+MODULE_PATH = next(Path(__file__).resolve().parents[1].glob("leiden-*.py"), None)
+if MODULE_PATH is None:
+    raise RuntimeError("Could not locate the main Leiden application script for prompt caching tests.")
 
 
 def load_app_module():
