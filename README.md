@@ -9,6 +9,7 @@ This application provides a user-friendly GUI for converting inscriptions writte
 ## Features
 
 - **AI-Powered Conversion**: Uses Claude AI for intelligent Leiden to EpiDoc translation
+- **Intelligent Prompt Caching**: Reuses Claude prompt prefixes during multi-file batches while bypassing cache overhead for single-file conversions
 - **Native GUI**: Clean, responsive interface built with PySide6/Qt
 - **Unicode Support**: Full support for Greek, Hebrew, Arabic, and other ancient scripts
 - **RTL Languages**: Automatic right-to-left text rendering for Hebrew, Arabic, and Syriac
@@ -118,9 +119,24 @@ Settings are stored in `leiden_epidoc_config.json` in the application directory:
 {
   "api_key": "your-api-key-here",
   "model": "claude-sonnet-4-20250514",
-  "save_location": "/path/to/save/directory"
+  "save_location": "/path/to/save/directory",
+  "prompt_cache_batch_threshold": 2
 }
 ```
+
+### Prompt Caching for Batch Conversions
+
+Prompt caching lives in `LeidenToEpiDocConverter.should_use_prompt_cache()` and
+`LeidenToEpiDocConverter._build_request_params()` in `leiden-epidoc.py`.
+Those methods only attach Anthropic cache controls when a conversion batch meets
+the configurable `prompt_cache_batch_threshold` (default `2`), because the
+cache write cost is only recovered when the same prompt prefix is reused by
+later requests in the batch. Single-file conversions intentionally bypass the
+cache and keep the original request shape.
+
+The focused regression tests in `tests/test_prompt_caching.py` demonstrate the
+intended savings pattern: the first request in a batch can create the cache and
+later requests can read from it, while one-off conversions remain uncached.
 
 ## Architecture
 

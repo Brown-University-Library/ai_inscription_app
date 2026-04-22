@@ -81,7 +81,7 @@ class ConversionThread(QThread):
         for idx, file_item in enumerate(self.file_items, 1):
             self.file_started.emit(file_item.file_path)
             self.progress.emit(idx, total)
-            result = self.converter.get_epidoc(file_item.input_text)
+            result = self.converter.get_epidoc(file_item.input_text, batch_size=total)
             if result.get("error"):
                 errors.append((file_item.file_name, result["error"]))
             self.file_completed.emit(file_item.file_path, result)
@@ -170,6 +170,8 @@ class LeidenToEpiDocConverter:
     
     # Valid token count mode values
     TOKEN_COUNT_MODES = ("manual", "automatic", "disabled")
+    DEFAULT_PROMPT_CACHE_BATCH_THRESHOLD = 2
+    PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
     
     def __init__(self):
         self.config = self.load_config()
@@ -181,6 +183,9 @@ class LeidenToEpiDocConverter:
         self.token_count_mode = self.config.get("token_count_mode", "manual")
         if self.token_count_mode not in self.TOKEN_COUNT_MODES:
             self.token_count_mode = "manual"
+        self.prompt_cache_batch_threshold = self._sanitize_prompt_cache_threshold(
+            self.config.get("prompt_cache_batch_threshold", self.DEFAULT_PROMPT_CACHE_BATCH_THRESHOLD)
+        )
         self.last_output = ""
         # Custom prompt and examples (None means use defaults from leiden_prompts.py)
         self.custom_prompt = None
@@ -204,19 +209,83 @@ class LeidenToEpiDocConverter:
             "save_location": self.save_location,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
-            "token_count_mode": self.token_count_mode
+            "token_count_mode": self.token_count_mode,
+            "prompt_cache_batch_threshold": self.prompt_cache_batch_threshold
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
     
-    def _build_request_params(self, leiden: str) -> tuple[str, list]:
-        """Build the system prompt and messages payload used for both conversion and token counting.
+    def _sanitize_prompt_cache_threshold(self, threshold) -> int:
+        """Clamp the prompt-cache threshold to a safe integer value.
+        
+        Prompt caching has an up-front write cost, so values below 2 would enable
+        caching for single-document work where it is unlikely to pay for itself.
+        """
+        try:
+            normalized = int(threshold)
+        except (TypeError, ValueError):
+            return self.DEFAULT_PROMPT_CACHE_BATCH_THRESHOLD
+        return max(self.DEFAULT_PROMPT_CACHE_BATCH_THRESHOLD, normalized)
+    
+    def should_use_prompt_cache(self, batch_size: int = 1) -> bool:
+        """Return whether Anthropic prompt caching should be enabled for this batch.
+        
+        The cache is only worthwhile when the stable prompt prefix will be reused
+        across multiple conversions in the same batch. Single-document requests
+        intentionally bypass the cache to avoid paying the cache-write overhead.
+        """
+        try:
+            normalized_batch_size = int(batch_size)
+        except (TypeError, ValueError):
+            return False
+        return normalized_batch_size >= self.prompt_cache_batch_threshold
+    
+    def _build_request_params(self, leiden: str, batch_size: int = 1) -> tuple[str | list[dict], list]:
+        """Build the Claude request payload used for conversion and token counting.
+        
+        When converting multiple files in one batch, the stable prompt prefix
+        (system instructions plus example block) is marked with Anthropic's
+        ephemeral cache control so the first request writes the cache and later
+        requests can read it. Single-message conversions keep the legacy payload
+        shape to avoid the cache-write cost entirely.
         
         Returns:
             tuple: (system_prompt, messages) matching the API request structure
         """
         prompt = self.custom_prompt if self.custom_prompt else SYSTEM_INSTRUCTION
         examples = self.custom_examples if self.custom_examples else EXAMPLES_TEXT
+        examples_text = (
+            "Below are example inputs written according to the Leiden convention "
+            "and the corresponding outputs in XML following the EpiDoc convention.\n"
+            f"{examples}\n"
+        )
+        input_text = (
+            "\nHere is the text in Leiden Conventions format that you need to translate: "
+            f"\n\n<Input>\n{leiden}\n</Input>\n"
+        )
+        
+        if self.should_use_prompt_cache(batch_size):
+            return (
+                [{
+                    "type": "text",
+                    "text": prompt,
+                    "cache_control": self.PROMPT_CACHE_CONTROL
+                }],
+                [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": examples_text,
+                            "cache_control": self.PROMPT_CACHE_CONTROL
+                        },
+                        {
+                            "type": "text",
+                            "text": input_text
+                        }
+                    ]
+                }]
+            )
         
         messages = [
             {
@@ -224,7 +293,7 @@ class LeidenToEpiDocConverter:
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Below are example inputs written according to the Leiden convention and the corresponding outputs in XML following the EpiDoc convention.\n{examples}\n\nHere is the text in Leiden Conventions format that you need to translate: \n\n<Input>\n{leiden}\n</Input>\n"
+                        "text": f"{examples_text}{input_text}"
                     }
                 ]
             }
@@ -232,8 +301,15 @@ class LeidenToEpiDocConverter:
         
         return prompt, messages
     
-    def get_epidoc(self, leiden) -> dict:
-        """Core conversion function - returns a dict with parsed sections"""
+    def get_epidoc(self, leiden, batch_size: int = 1) -> dict:
+        """Convert Leiden text to EpiDoc XML and return parsed response sections.
+        
+        Args:
+            leiden: The Leiden transcription to convert.
+            batch_size: Number of files being converted together. Batch sizes at
+                or above ``prompt_cache_batch_threshold`` enable Claude prompt
+                caching for the reusable prompt prefix.
+        """
         if not self.api_key:
             return {
                 "error": "Error: API key not configured. Please set it in Settings.",
@@ -245,11 +321,12 @@ class LeidenToEpiDocConverter:
             client = anthropic.Anthropic(api_key=self.api_key)
             
             # Use custom prompt/examples if set, otherwise use defaults
-            prompt, messages = self._build_request_params(leiden)
+            prompt, messages = self._build_request_params(leiden, batch_size=batch_size)
             
             # Debug logging to help troubleshoot
             logger.info(f"Using custom prompt: {self.custom_prompt is not None}")
             logger.info(f"Using custom examples: {self.custom_examples is not None}")
+            logger.info(f"Prompt caching enabled: {self.should_use_prompt_cache(batch_size)}")
             if self.custom_prompt:
                 logger.debug(f"Custom prompt preview: {self.custom_prompt[:50]}...")
             if self.custom_examples:
