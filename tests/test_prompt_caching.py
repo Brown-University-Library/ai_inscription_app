@@ -75,7 +75,7 @@ sys.modules['PySide6.QtCore'] = dummy_core
 sys.modules['PySide6.QtGui'] = dummy_gui
 
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "leiden-epidoc.py"
+MODULE_PATH = next(Path(__file__).resolve().parents[1].glob("leiden-*.py"))
 
 
 def load_app_module():

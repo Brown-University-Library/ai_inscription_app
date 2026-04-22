@@ -183,7 +183,7 @@ class LeidenToEpiDocConverter:
         self.token_count_mode = self.config.get("token_count_mode", "manual")
         if self.token_count_mode not in self.TOKEN_COUNT_MODES:
             self.token_count_mode = "manual"
-        self.prompt_cache_batch_threshold = self._normalize_prompt_cache_threshold(
+        self.prompt_cache_batch_threshold = self._sanitize_prompt_cache_threshold(
             self.config.get("prompt_cache_batch_threshold", self.DEFAULT_PROMPT_CACHE_BATCH_THRESHOLD)
         )
         self.last_output = ""
@@ -215,7 +215,7 @@ class LeidenToEpiDocConverter:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
     
-    def _normalize_prompt_cache_threshold(self, threshold) -> int:
+    def _sanitize_prompt_cache_threshold(self, threshold) -> int:
         """Clamp the prompt-cache threshold to a safe integer value.
         
         Prompt caching has an up-front write cost, so values below 2 would enable
